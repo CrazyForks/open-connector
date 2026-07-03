@@ -11,6 +11,8 @@
 [![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fconnector.oomol.com%2Fv1%2Fcatalog&query=data.providerCount&label=Providers&color=%237d7fe9)](https://oomol.com/apps)
 [![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fconnector.oomol.com%2Fv1%2Fcatalog&query=data.actionCount&label=Actions&color=%237d7fe9)](https://oomol.com/apps)
 
+面向 Agent SaaS 鉴权、工具调用和集成的 Composio 开源替代品。
+
 OpenConnector 是一个开源鉴权网关，当前在本仓库提供 680+ 个 provider 和 7,000+ 个可直接调用的预置 Action。
 它兼容 Cloudflare 部署，并通过 [Connector SDK](https://github.com/oomol-lab/connector-sdk)、MCP 和 HTTP 让 AI Agent
 安全地调用真实 SaaS。

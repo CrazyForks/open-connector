@@ -11,6 +11,8 @@
 [![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fconnector.oomol.com%2Fv1%2Fcatalog&query=data.providerCount&label=Providers&color=%237d7fe9)](https://oomol.com/apps)
 [![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fconnector.oomol.com%2Fv1%2Fcatalog&query=data.actionCount&label=Actions&color=%237d7fe9)](https://oomol.com/apps)
 
+An open-source alternative to Composio for agent-ready SaaS auth, tools, and integrations.
+
 OpenConnector is an open-source auth gateway that currently provides 680+ providers and 7,000+
 prebuilt Actions in this repository. It supports Cloudflare-compatible deployment and lets AI
 agents call real SaaS products safely through the
