@@ -153,7 +153,9 @@ export class ConnectServer {
     );
     app.post("/api/oauth/authorizations", (context) => this.createOAuthAuthorization(context));
     app.get("/oauth/callback", (context) => this.completeOAuth(context));
-    app.all("/mcp", (context) => this.handleMcp(context));
+    app.post("/mcp", (context) => this.handleMcp(context));
+    app.get("/mcp", (context) => this.rejectMcpMethod(context));
+    app.delete("/mcp", (context) => this.rejectMcpMethod(context));
     app.get("/mcp/tools", (context) => context.json({ tools: listMcpToolSummaries() }));
 
     this.options.registerStaticRoutes?.(app);
@@ -450,6 +452,20 @@ export class ConnectServer {
     } finally {
       await server.close();
     }
+  }
+
+  private rejectMcpMethod(context: Context): Response {
+    return context.json(
+      {
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message: "Method not allowed.",
+        },
+        id: null,
+      },
+      405,
+    );
   }
 
   private async listConnections(context: Context): Promise<Response> {

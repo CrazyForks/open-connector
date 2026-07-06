@@ -597,6 +597,24 @@ describe("ConnectServer", () => {
     }
   });
 
+  it("rejects non-POST MCP requests", async () => {
+    const app = createTestServer([apiKeyProvider]).createApp();
+
+    for (const method of ["DELETE", "GET"]) {
+      const response = await app.request("/mcp", { method });
+
+      expect(response.status).toBe(405);
+      await expect(response.json()).resolves.toEqual({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message: "Method not allowed.",
+        },
+        id: null,
+      });
+    }
+  });
+
   it("accepts the shared OAuth callback route without a service path segment", async () => {
     const app = createTestServer([apiKeyProvider], { auth: { adminToken: "local-token" } }).createApp();
 

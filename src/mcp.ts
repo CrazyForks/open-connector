@@ -5,6 +5,7 @@ import type { ActionSearchIndexProvider } from "./core/action-search.ts";
 import type { JsonSchema, ProviderDefinition } from "./core/types.ts";
 import type { IProviderLoader } from "./providers/provider-loader.ts";
 import type { ActionRunner } from "./server/actions/action-runner.ts";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as z from "zod/v4";
@@ -84,7 +85,7 @@ export function createMcpServer(options: IMcpServerOptions): McpServer {
         query: z.string().optional().describe("Optional case-insensitive app name, service, category, or auth filter."),
       },
     },
-    async ({ query }) => textResult(await listApps(options, query)),
+    async ({ query }) => toolResult(successPayload(await listApps(options, query))),
   );
 
   server.registerTool(
@@ -105,7 +106,8 @@ export function createMcpServer(options: IMcpServerOptions): McpServer {
         limit: z.number().int().min(1).max(50).default(20).describe("Maximum number of actions to return."),
       },
     },
-    async ({ query, service, limit }) => textResult(await searchActions(options, { query, service, limit })),
+    async ({ query, service, limit }) =>
+      toolResult(successPayload(await searchActions(options, { query, service, limit }))),
   );
 
   server.registerTool(
@@ -117,7 +119,7 @@ export function createMcpServer(options: IMcpServerOptions): McpServer {
         actionId: z.string().describe("Full action id, for example github.get_current_user."),
       },
     },
-    async ({ actionId }) => textResult(await getActionGuide(options, actionId)),
+    async ({ actionId }) => toolResult(await getActionGuide(options, actionId)),
   );
 
   server.registerTool(
@@ -134,7 +136,7 @@ export function createMcpServer(options: IMcpServerOptions): McpServer {
           .describe("Action input object matching the selected action guide."),
       },
     },
-    async ({ actionId, input }) => textResult(await executeAction(options, actionId, input)),
+    async ({ actionId, input }) => toolResult(await executeAction(options, actionId, input)),
   );
 
   return server;
@@ -194,39 +196,26 @@ async function searchActions(
   return Promise.all(actions);
 }
 
-async function getActionGuide(options: IMcpServerOptions, actionId: string): Promise<unknown> {
+async function getActionGuide(options: IMcpServerOptions, actionId: string): Promise<ToolPayload> {
   const action = options.catalog.actionsById.get(actionId);
   if (!action) {
-    return {
-      ok: false,
-      error: {
-        code: "unknown_action",
-        message: `Unknown action: ${actionId}`,
-      },
-    };
+    return errorPayload("unknown_action", `Unknown action: ${actionId}`);
   }
 
-  return {
-    ok: true,
+  return successPayload({
     capability: await describeActionCapability(options, action),
     markdown: renderActionMarkdown(action, await describeActionMarkdownContext(options, action)),
-  };
+  });
 }
 
 async function executeAction(
   options: IMcpServerOptions,
   actionId: string,
   input: Record<string, unknown>,
-): Promise<unknown> {
+): Promise<ToolPayload> {
   const action = options.catalog.actionsById.get(actionId);
   if (!action) {
-    return {
-      ok: false,
-      error: {
-        code: "unknown_action",
-        message: `Unknown action: ${actionId}`,
-      },
-    };
+    return errorPayload("unknown_action", `Unknown action: ${actionId}`);
   }
 
   const run = await options.actions.run({
@@ -234,7 +223,19 @@ async function executeAction(
     input,
     caller: "mcp",
   });
-  return run?.result;
+  if (!run) {
+    return errorPayload("unknown_action", `Unknown action: ${actionId}`);
+  }
+  if (!run.result.ok) {
+    return {
+      ok: false,
+      error: run.result.error ?? {
+        code: "execution_failed",
+        message: "Action execution failed.",
+      },
+    };
+  }
+  return successPayload(run.result.output);
 }
 
 function summarizeInputSchema(schema: JsonSchema): unknown {
@@ -302,13 +303,40 @@ function describeSchemaType(schema: JsonSchema | undefined): string {
   return typeof schema.type === "string" ? schema.type : "unknown";
 }
 
-function textResult(value: unknown): { content: Array<{ type: "text"; text: string }> } {
+type ToolPayload =
+  | {
+      ok: true;
+      data: unknown;
+    }
+  | {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+        details?: unknown;
+      };
+    };
+
+function successPayload(data: unknown): ToolPayload {
+  return { ok: true, data };
+}
+
+function errorPayload(code: string, message: string): ToolPayload {
+  return {
+    ok: false,
+    error: { code, message },
+  };
+}
+
+function toolResult(payload: ToolPayload): CallToolResult {
   return {
     content: [
       {
         type: "text",
-        text: typeof value === "string" ? value : JSON.stringify(value, null, 2),
+        text: JSON.stringify(payload, null, 2),
       },
     ],
+    structuredContent: payload,
+    ...(payload.ok ? {} : { isError: true }),
   };
 }

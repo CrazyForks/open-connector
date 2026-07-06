@@ -33,6 +33,9 @@ Point MCP-capable clients at:
 http://localhost:3000/mcp
 ```
 
+The local MCP endpoint supports stateless `POST` JSON-RPC requests with JSON responses. It does not
+keep `GET` SSE streams open.
+
 The MCP server exposes a small discovery-oriented tool set:
 
 - `list_apps`

@@ -184,7 +184,7 @@ export function createOpenApiDocument(
       { name: "Access", description: "Runtime bearer tokens for /v1 and MCP clients." },
       { name: "Files", description: "Local temporary file transit for provider actions." },
       { name: "Runs", description: "Local action execution and recent run history." },
-      { name: "MCP", description: "MCP Streamable HTTP endpoint and tool metadata." },
+      { name: "MCP", description: "Stateless MCP POST endpoint and tool metadata." },
     ],
     paths,
     components: {
@@ -527,7 +527,7 @@ function createMcpPath(): unknown {
   return {
     post: {
       tags: ["MCP"],
-      summary: "Handle MCP Streamable HTTP requests.",
+      summary: "Handle stateless MCP JSON-RPC POST requests.",
       responses: {
         "200": {
           description: "MCP JSON-RPC response.",
