@@ -18,7 +18,7 @@
     "test": "vitest run",
     "typecheck": "npm run generate:registry && node scripts/typecheck.ts src scripts-all examples",
     "generate:registry": "node scripts/generate-provider-registry.ts",
-    "generate:catalog": "npm run generate:registry && node scripts/generate-catalog.ts",
+    "generate:catalog": "node scripts/generate-catalog.ts",
     "generate:provider": "node scripts/generate-provider.ts",
     "runtime:data": "node scripts/runtime-data.ts",
     "lint": "oxlint .",

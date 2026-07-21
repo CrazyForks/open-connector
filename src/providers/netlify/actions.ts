@@ -406,23 +406,18 @@ const submissionsOutputSchema = s.object(
   { required: ["submissions", "count"], description: "The normalized Netlify submissions list." },
 );
 
-const netlifyReadScope = "netlify.read";
-const netlifySiteWriteScope = "netlify.site.write";
-const netlifyDeployWriteScope = "netlify.deploy.write";
-const netlifyFormWriteScope = "netlify.form.write";
-
 const actionSources: readonly NetlifyActionSource[] = [
   {
     name: "get_current_user",
     description: "Retrieve the Netlify user associated with the connected credential.",
-    requiredScopes: [netlifyReadScope],
+    requiredScopes: [],
     inputSchema: emptyInputSchema,
     outputSchema: currentUserOutputSchema,
   },
   {
     name: "list_accounts",
     description: "List Netlify accounts accessible to the connected credential.",
-    requiredScopes: [netlifyReadScope],
+    requiredScopes: [],
     inputSchema: emptyInputSchema,
     outputSchema: accountsOutputSchema,
   },
@@ -430,77 +425,77 @@ const actionSources: readonly NetlifyActionSource[] = [
     name: "get_account",
     description:
       "Retrieve one Netlify account membership, including billing and capability fields returned by Netlify.",
-    requiredScopes: [netlifyReadScope],
+    requiredScopes: [],
     inputSchema: accountInputSchema,
     outputSchema: accountOutputSchema,
   },
   {
     name: "list_sites",
     description: "List Netlify sites accessible to the connected credential.",
-    requiredScopes: [netlifyReadScope],
+    requiredScopes: [],
     inputSchema: listSitesInputSchema,
     outputSchema: sitesOutputSchema,
   },
   {
     name: "get_site",
     description: "Retrieve one Netlify site by site ID or name.",
-    requiredScopes: [netlifyReadScope],
+    requiredScopes: [],
     inputSchema: siteInputSchema,
     outputSchema: siteOutputSchema,
   },
   {
     name: "list_site_deploys",
     description: "List deploys for one Netlify site.",
-    requiredScopes: [netlifyReadScope],
+    requiredScopes: [],
     inputSchema: listSiteDeploysInputSchema,
     outputSchema: deploysOutputSchema,
   },
   {
     name: "get_deploy",
     description: "Retrieve one Netlify deploy by deploy ID.",
-    requiredScopes: [netlifyReadScope],
+    requiredScopes: [],
     inputSchema: deployInputSchema,
     outputSchema: deployOutputSchema,
   },
   {
     name: "cancel_deploy",
     description: "Cancel one Netlify deploy by deploy ID.",
-    requiredScopes: [netlifyDeployWriteScope],
+    requiredScopes: [],
     inputSchema: deployInputSchema,
     outputSchema: deployOutputSchema,
   },
   {
     name: "lock_deploy",
     description: "Lock one Netlify deploy by deploy ID.",
-    requiredScopes: [netlifyDeployWriteScope],
+    requiredScopes: [],
     inputSchema: deployInputSchema,
     outputSchema: deployOutputSchema,
   },
   {
     name: "unlock_deploy",
     description: "Unlock one Netlify deploy by deploy ID.",
-    requiredScopes: [netlifyDeployWriteScope],
+    requiredScopes: [],
     inputSchema: deployInputSchema,
     outputSchema: deployOutputSchema,
   },
   {
     name: "create_site_build",
     description: "Start a Netlify build for one site without uploading binary files.",
-    requiredScopes: [netlifySiteWriteScope],
+    requiredScopes: [],
     inputSchema: createSiteBuildInputSchema,
     outputSchema: buildOutputSchema,
   },
   {
     name: "create_site_deploy_from_zip_url",
     description: "Create a Netlify site deploy by downloading a public zip file URL and uploading it to Netlify.",
-    requiredScopes: [netlifyDeployWriteScope],
+    requiredScopes: [],
     inputSchema: createSiteDeployFromZipUrlInputSchema,
     outputSchema: deployOutputSchema,
   },
   {
     name: "upload_deploy_file_from_url",
     description: "Upload one file into an existing Netlify deploy by downloading a public file URL first.",
-    requiredScopes: [netlifyDeployWriteScope],
+    requiredScopes: [],
     inputSchema: uploadDeployFileFromUrlInputSchema,
     outputSchema: fileOutputSchema,
   },
@@ -508,42 +503,42 @@ const actionSources: readonly NetlifyActionSource[] = [
     name: "upload_deploy_function_from_zip_url",
     description:
       "Upload one Netlify function bundle into an existing deploy by downloading a public zip file URL first.",
-    requiredScopes: [netlifyDeployWriteScope],
+    requiredScopes: [],
     inputSchema: uploadDeployFunctionFromZipUrlInputSchema,
     outputSchema: functionOutputSchema,
   },
   {
     name: "get_build",
     description: "Retrieve one Netlify build by build ID.",
-    requiredScopes: [netlifyReadScope],
+    requiredScopes: [],
     inputSchema: buildInputSchema,
     outputSchema: buildOutputSchema,
   },
   {
     name: "notify_build_start",
     description: "Notify Netlify that one build has started.",
-    requiredScopes: [netlifySiteWriteScope],
+    requiredScopes: [],
     inputSchema: buildInputSchema,
     outputSchema: emptySuccessOutputSchema,
   },
   {
     name: "list_site_forms",
     description: "List forms detected for one Netlify site.",
-    requiredScopes: [netlifyReadScope],
+    requiredScopes: [],
     inputSchema: listSiteFormsInputSchema,
     outputSchema: formsOutputSchema,
   },
   {
     name: "list_submissions",
     description: "List Netlify form submissions by site or by form.",
-    requiredScopes: [netlifyReadScope],
+    requiredScopes: [],
     inputSchema: listSubmissionsInputSchema,
     outputSchema: submissionsOutputSchema,
   },
   {
     name: "delete_submission",
     description: "Delete one Netlify form submission by submission ID.",
-    requiredScopes: [netlifyFormWriteScope],
+    requiredScopes: [],
     inputSchema: s.object(
       {
         submissionId: s.string({ minLength: 1, description: "The Netlify form submission ID." }),

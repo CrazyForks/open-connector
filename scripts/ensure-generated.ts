@@ -19,13 +19,15 @@ const generatedPaths = new Set(registryPaths);
 
 const sourceMtimeMs = await newestMtimeMs(sourcePaths);
 
-const registriesFresh = await Promise.all(registryPaths.map((path) => isFreshFile(path, sourceMtimeMs)));
-if (registriesFresh.some((fresh) => !fresh)) {
-  runNodeScript("scripts/generate-provider-registry.ts");
-}
-
-if (!(await isFreshCatalog(sourceMtimeMs))) {
+const [registriesPresent, catalogFresh] = await Promise.all([
+  Promise.all(registryPaths.map((path) => isFile(path))),
+  isFreshCatalog(sourceMtimeMs),
+]);
+// A fresh catalog proves both registries were generated from the same provider source set.
+if (!catalogFresh) {
   runNodeScript("scripts/generate-catalog.ts");
+} else if (registriesPresent.some((present) => !present)) {
+  runNodeScript("scripts/generate-provider-registry.ts");
 }
 
 function runNodeScript(script: string): void {
@@ -39,10 +41,10 @@ function runNodeScript(script: string): void {
   }
 }
 
-async function isFreshFile(path: string, sourceMtimeMs: number): Promise<boolean> {
+async function isFile(path: string): Promise<boolean> {
   try {
     const stats = await stat(path);
-    return stats.isFile() && stats.mtimeMs >= sourceMtimeMs;
+    return stats.isFile();
   } catch (error) {
     if (isNotFoundError(error)) {
       return false;
@@ -63,7 +65,9 @@ async function isFreshCatalog(sourceMtimeMs: number): Promise<boolean> {
       return false;
     }
 
-    const catalogServices = jsonFiles.map((entry) => entry.name.slice(0, -".json".length)).sort();
+    const catalogServices = jsonFiles
+      .map((entry) => entry.name.slice(0, -".json".length))
+      .sort((a, b) => a.localeCompare(b));
     if (
       catalogServices.length !== services.length ||
       catalogServices.some((service, index) => service !== services[index])

@@ -5,15 +5,23 @@ import { join } from "node:path";
 import { loadProviderSources } from "./provider-source.ts";
 
 const providersDir = join(process.cwd(), "src/providers");
-const providerSources = await loadProviderSources();
 
-await Promise.all([
-  writeRegistry("registry.generated.ts", providerSources),
-  writeRegistry(
-    "registry.cloudflare.generated.ts",
-    providerSources.filter((source) => !source.nodeOnly),
-  ),
-]);
+/**
+ * Generate provider registries from definitions already loaded by the caller.
+ */
+export async function generateProviderRegistries(providerSources: ProviderSource[]): Promise<void> {
+  await Promise.all([
+    writeRegistry("registry.generated.ts", providerSources),
+    writeRegistry(
+      "registry.cloudflare.generated.ts",
+      providerSources.filter((source) => !source.nodeOnly),
+    ),
+  ]);
+}
+
+if (import.meta.main) {
+  await generateProviderRegistries(await loadProviderSources());
+}
 
 function propertyName(service: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(service) ? service : JSON.stringify(service);
