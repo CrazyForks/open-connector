@@ -48,6 +48,7 @@ type JiraActionContext = {
   fetcher: typeof fetch;
   providerMetadata?: Record<string, unknown>;
   deployment: "cloud" | "server";
+  signal?: AbortSignal;
 };
 
 type JiraActionHandler = (input: Record<string, unknown>, context: JiraActionContext) => Promise<unknown>;
@@ -61,6 +62,7 @@ type JiraRequestInput = {
   query?: Record<string, string | undefined>;
   body?: Record<string, unknown>;
   notFoundAsInvalidInput?: boolean;
+  signal?: AbortSignal;
 };
 
 const jiraApiOrigin = "https://api.atlassian.com";
@@ -109,6 +111,7 @@ export const jiraActionHandlers: Record<JiraActionName, JiraActionHandler> = {
 async function fetchJiraCurrentAccount(
   accessToken: string,
   fetcher: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<{
   profile: {
     accountId: string;
@@ -119,6 +122,7 @@ async function fetchJiraCurrentAccount(
 }> {
   const accessibleResourcesResponse = await fetcher(jiraAccessibleResourcesUrl, {
     headers: buildAuthorizationHeaders(accessToken),
+    signal,
   });
   const accessibleResourcesPayload = await readJsonValue(accessibleResourcesResponse);
   if (!accessibleResourcesResponse.ok) {
@@ -142,6 +146,7 @@ async function fetchJiraCurrentAccount(
     fetcher,
     providerMetadata: { cloudId },
     path: jiraCurrentUserPath,
+    signal,
   });
 
   const accountId = requireNonEmptyString(currentUser.accountId, "jira accountId");
@@ -178,6 +183,7 @@ async function fetchJiraServerCurrentAccount(
   accessToken: string,
   apiBaseUrl: string,
   fetcher: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<{
   profile: {
     accountId: string;
@@ -191,6 +197,7 @@ async function fetchJiraServerCurrentAccount(
     fetcher,
     providerMetadata: { apiBaseUrl },
     path: jiraCurrentUserPath,
+    signal,
   });
   const accountKey =
     asOptionalString(currentUser.accountId) ?? asOptionalString(currentUser.key) ?? asOptionalString(currentUser.name);
@@ -202,7 +209,7 @@ async function fetchJiraServerCurrentAccount(
     asOptionalString(currentUser.displayName) ?? asOptionalString(currentUser.emailAddress) ?? accountKey;
   return {
     profile: {
-      accountId: `jira:${new URL(apiBaseUrl).host}:${accountKey}`,
+      accountId: buildJiraServerAccountId(apiBaseUrl, accountKey),
       displayName,
     },
     grantedScopes: [],
@@ -243,6 +250,7 @@ export const executors: ProviderExecutors = defineProviderExecutors<JiraActionCo
         fetcher,
         providerMetadata: credential.metadata,
         deployment: "cloud",
+        signal: context.signal,
       };
     }
     if (credential?.authType === "custom_credential") {
@@ -254,6 +262,7 @@ export const executors: ProviderExecutors = defineProviderExecutors<JiraActionCo
           apiBaseUrl: resolveJiraServerApiBaseUrl(credential.values, credential.metadata),
         },
         deployment: "server",
+        signal: context.signal,
       };
     }
     throw new ProviderRequestError(401, "Configure Jira OAuth or Data Center personal access token credentials first.");
@@ -290,13 +299,13 @@ export const proxy: ProviderProxyExecutor = defineProviderProxy({
 });
 
 export const credentialValidators: CredentialValidators = {
-  async oauth2(input, { fetcher }) {
-    return fetchJiraCurrentAccount(input.accessToken, fetcher);
+  async oauth2(input, { fetcher, signal }) {
+    return fetchJiraCurrentAccount(input.accessToken, fetcher, signal);
   },
-  async customCredential(input, { fetcher }) {
+  async customCredential(input, { fetcher, signal }) {
     const apiBaseUrl = normalizeJiraServerApiBaseUrl(input.values.baseUrl);
     const guardedFetcher = createProviderFetch({ fetch: fetcher, allowPrivateNetwork: isPrivateNetworkAccessAllowed });
-    return fetchJiraServerCurrentAccount(requirePersonalAccessToken(input.values), apiBaseUrl, guardedFetcher);
+    return fetchJiraServerCurrentAccount(requirePersonalAccessToken(input.values), apiBaseUrl, guardedFetcher, signal);
   },
 };
 
@@ -316,6 +325,7 @@ async function listProjects(input: Record<string, unknown>, context: JiraActionC
       providerMetadata: context.providerMetadata,
       path: "/project",
       query: compactQuery({ expand }),
+      signal: context.signal,
     });
     const projects = readRecordArray(payload).map((project) => normalizeProject(project));
     const page = projects.slice(startAt, startAt + limit);
@@ -337,6 +347,7 @@ async function listProjects(input: Record<string, unknown>, context: JiraActionC
       startAt: String(startAt),
       expand,
     }),
+    signal: context.signal,
   });
 
   const values = readRecordArray(payload.values).map((project) => normalizeProject(project));
@@ -361,6 +372,7 @@ async function getProject(input: Record<string, unknown>, context: JiraActionCon
     path: `/project/${encodeURIComponent(projectIdOrKey)}`,
     query: compactQuery({ expand }),
     notFoundAsInvalidInput: true,
+    signal: context.signal,
   });
 
   return {
@@ -386,6 +398,7 @@ async function searchIssues(input: Record<string, unknown>, context: JiraActionC
         ? { startAt: parseNumericCursor(input.cursor), expand: optionalStringList(readStringArray(input.expand)) }
         : { nextPageToken: asOptionalString(input.cursor), expand: joinOptionalList(readStringArray(input.expand)) }),
     }),
+    signal: context.signal,
   });
 
   return {
@@ -415,6 +428,7 @@ async function getIssue(input: Record<string, unknown>, context: JiraActionConte
       expand: joinOptionalList(readStringArray(input.expand)),
     }),
     notFoundAsInvalidInput: true,
+    signal: context.signal,
   });
 
   return {
@@ -432,6 +446,7 @@ async function createIssue(input: Record<string, unknown>, context: JiraActionCo
     body: {
       fields: buildCreateIssueFields(input, context.deployment),
     },
+    signal: context.signal,
   });
 
   const createdIssueIdOrKey =
@@ -451,6 +466,7 @@ async function createIssue(input: Record<string, unknown>, context: JiraActionCo
     query: {
       fields: joinOptionalList(defaultIssueFieldIds),
     },
+    signal: context.signal,
   });
 
   return {
@@ -474,6 +490,7 @@ async function listIssueComments(input: Record<string, unknown>, context: JiraAc
       expand: joinOptionalList(readStringArray(input.expand)),
     }),
     notFoundAsInvalidInput: true,
+    signal: context.signal,
   });
 
   const comments = readRecordArray(payload.comments).map((comment) => normalizeComment(comment));
@@ -502,6 +519,7 @@ async function addComment(input: Record<string, unknown>, context: JiraActionCon
       body: buildCommentBody(rawBody, textBody, context.deployment),
     },
     notFoundAsInvalidInput: true,
+    signal: context.signal,
   });
 
   return {
@@ -517,7 +535,13 @@ function buildCommentBody(rawBody: unknown, textBody: string | undefined, deploy
     }
     return text;
   }
-  return rawBody !== undefined ? normalizeLooseRecord(rawBody, "body") : textToAdfDocument(textBody ?? "");
+  if (rawBody !== undefined) {
+    return normalizeLooseRecord(rawBody, "body");
+  } else if (textBody) {
+    return textToAdfDocument(textBody);
+  } else {
+    throw new ProviderRequestError(400, "comment body or bodyText is required");
+  }
 }
 
 async function jiraJsonRequest<T>(input: JiraRequestInput) {
@@ -544,6 +568,7 @@ async function jiraRequest(input: JiraRequestInput) {
     method,
     headers,
     ...(input.body ? { body: JSON.stringify(input.body) } : {}),
+    signal: input.signal,
   });
 
   if (!response.ok) {
@@ -638,6 +663,12 @@ export function normalizeJiraServerApiBaseUrl(
 
 function resolveJiraServerApiBaseUrl(values: Record<string, string>, metadata: Record<string, unknown>): string {
   return asOptionalString(metadata.apiBaseUrl) ?? normalizeJiraServerApiBaseUrl(values.baseUrl);
+}
+
+function buildJiraServerAccountId(apiBaseUrl: string, accountKey: string): string {
+  const url = new URL(apiBaseUrl);
+  const instancePath = url.pathname.slice(0, -"/rest/api/2".length);
+  return `jira:${url.host}${instancePath}:${accountKey}`;
 }
 
 function requirePersonalAccessToken(values: Record<string, string>): string {

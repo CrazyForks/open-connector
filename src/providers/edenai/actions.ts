@@ -14,10 +14,10 @@ const edenaiModelSchema = s.looseRequiredObject(
   {
     id: s.string("The model identifier, formatted as `<vendor>/<model>` (for example `openai/gpt-4o-mini`)."),
     object: s.string("The object type returned by the API."),
-    created: s.integer("The Unix timestamp when the model was created."),
     owned_by: s.string("The upstream vendor that owns the model."),
+    capabilities: s.looseObject("The model capabilities reported by Eden AI."),
   },
-  { optional: ["created", "owned_by"] },
+  { optional: ["owned_by", "capabilities"] },
 );
 
 const listModelsOutputSchema = s.looseRequiredObject("The response payload for listing Eden AI models.", {
@@ -63,6 +63,11 @@ const chatCompletionInputSchema: JsonSchema = {
     {
       model: s.string("The Eden AI model identifier, formatted as `<vendor>/<model>`.", { minLength: 1 }),
       messages: s.array("The ordered conversation history sent to the model.", chatMessageSchema, { minItems: 1 }),
+      fallbacks: s.stringArray("Fallback model identifiers to try in order if the primary model fails.", {
+        minItems: 1,
+        maxItems: 3,
+      }),
+      router_candidates: s.stringArray("Candidate model identifiers used when model is `@edenai`.", { minItems: 1 }),
       frequency_penalty: s.number("The frequency penalty applied to repeated tokens.", { minimum: -2, maximum: 2 }),
       logit_bias: jsonObjectSchema,
       logprobs: s.boolean("Whether to include token-level log probabilities."),
@@ -92,6 +97,7 @@ const chatCompletionInputSchema: JsonSchema = {
     {
       optional: [
         "frequency_penalty",
+        "fallbacks",
         "logit_bias",
         "logprobs",
         "max_completion_tokens",
@@ -99,6 +105,7 @@ const chatCompletionInputSchema: JsonSchema = {
         "n",
         "presence_penalty",
         "response_format",
+        "router_candidates",
         "seed",
         "stop",
         "stream",
@@ -150,8 +157,6 @@ const chatCompletionOutputSchema = s.looseRequiredObject(
   },
   { optional: ["usage", "cost"] },
 );
-
-export type EdenAiActionName = "list_models" | "create_chat_completion";
 
 export const edenaiActions: ActionDefinition[] = [
   defineProviderAction(service, {

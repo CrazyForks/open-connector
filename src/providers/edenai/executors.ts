@@ -1,6 +1,5 @@
 import type { CredentialValidators, ProviderExecutors } from "../../core/types.ts";
 import type { ApiKeyProviderContext, ProviderRuntimeHandler } from "../provider-runtime.ts";
-import type { EdenAiActionName } from "./actions.ts";
 
 import { compactObject, optionalRecord, optionalString } from "../../core/cast.ts";
 import { defineApiKeyProviderExecutors, providerUserAgent, ProviderRequestError } from "../provider-runtime.ts";
@@ -10,7 +9,14 @@ const edenaiApiBaseUrl = "https://api.edenai.run/v3";
 
 type EdenAiActionHandler = ProviderRuntimeHandler<ApiKeyProviderContext>;
 
-export const edenaiActionHandlers: Record<EdenAiActionName, EdenAiActionHandler> = {
+interface EdenAiRequest {
+  method?: "GET" | "POST";
+  path: string;
+  body?: Record<string, unknown>;
+  mode: "validate" | "execute";
+}
+
+export const edenaiActionHandlers: Record<string, EdenAiActionHandler> = {
   list_models(_input, context) {
     return edenaiRequest(context, { path: "/models", mode: "execute" });
   },
@@ -60,12 +66,7 @@ export const credentialValidators: CredentialValidators = {
 
 async function edenaiRequest(
   context: Pick<ApiKeyProviderContext, "apiKey" | "fetcher" | "signal">,
-  request: {
-    method?: "GET" | "POST";
-    path: string;
-    body?: Record<string, unknown>;
-    mode: "validate" | "execute";
-  },
+  request: EdenAiRequest,
 ): Promise<unknown> {
   let response: Response;
   try {

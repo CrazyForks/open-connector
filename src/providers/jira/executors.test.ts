@@ -56,7 +56,7 @@ describe("Jira Data Center credentials", () => {
     )) as CredentialValidationResult;
 
     expect(result).toMatchObject({
-      profile: { accountId: "jira:example.com:alex", displayName: "Alex" },
+      profile: { accountId: "jira:example.com/jira:alex", displayName: "Alex" },
       grantedScopes: [],
       metadata: { apiBaseUrl: "https://example.com/jira/rest/api/2", validationEndpoint: "/myself" },
     });
@@ -272,6 +272,15 @@ describe("Jira Cloud write payloads", () => {
       body: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }] },
     });
   });
+
+  it("rejects an empty comment body before calling Jira", async () => {
+    const fetcher = vi.fn(async (): Promise<Response> => Response.json({ id: "1" }));
+
+    await expect(
+      jiraActionHandlers.add_comment({ issueIdOrKey: "PROJ-1" }, cloudContext(fetcher)),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 });
 
 describe("Jira error mapping", () => {
@@ -308,7 +317,7 @@ function serverExecutionContext(): { getCredential: () => Promise<ResolvedCreden
   const credential: ResolvedCredential = {
     authType: "custom_credential",
     values: { baseUrl: "https://example.com/jira", personalAccessToken },
-    profile: { accountId: "jira:example.com:alex", displayName: "Alex", grantedScopes: [] },
+    profile: { accountId: "jira:example.com/jira:alex", displayName: "Alex", grantedScopes: [] },
     metadata: {},
   };
   return { getCredential: async () => credential };

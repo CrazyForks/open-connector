@@ -1,7 +1,14 @@
 import type { CredentialValidationResult } from "../../core/types.ts";
 import type { ProviderFetch, ProviderRuntimeHandler } from "../provider-runtime.ts";
 
-import { compactObject, optionalBoolean, optionalInteger, optionalRecord, optionalString } from "../../core/cast.ts";
+import {
+  compactObject,
+  optionalBoolean,
+  optionalInteger,
+  optionalNumber,
+  optionalRecord,
+  optionalString,
+} from "../../core/cast.ts";
 import { queryParams } from "../../core/request.ts";
 import { ProviderRequestError, providerUserAgent } from "../provider-runtime.ts";
 
@@ -27,6 +34,13 @@ interface CloudflareRequest {
   path: string;
   query?: Record<string, string | number | boolean | undefined>;
   body?: Record<string, unknown>;
+}
+
+interface CloudflareAuthContext {
+  email?: string;
+  apiKey: string;
+  fetcher: ProviderFetch;
+  signal?: AbortSignal;
 }
 
 const apiBaseUrl = "https://api.cloudflare.com/client/v4";
@@ -91,7 +105,11 @@ async function listRoutingRules(
   context: CloudflareEmailRoutingContext,
 ): Promise<unknown> {
   const explicitAccount = optionalString(input.accountId);
-  const zone = explicitAccount ? undefined : (optionalString(input.zoneId) ?? context.zoneId);
+  const explicitZone = optionalString(input.zoneId);
+  if (explicitAccount && explicitZone) {
+    throw new ProviderRequestError(400, "accountId and zoneId are mutually exclusive");
+  }
+  const zone = explicitAccount ? undefined : (explicitZone ?? context.zoneId);
   const account = explicitAccount ?? context.accountId;
   const scope = explicitAccount
     ? `accounts/${encodeURIComponent(explicitAccount)}`
@@ -102,7 +120,11 @@ async function listRoutingRules(
     context,
     {
       path: `/${scope}/email/routing/rules`,
-      query: { page: optionalInteger(input.page), per_page: optionalInteger(input.perPage) },
+      query: {
+        enabled: optionalBoolean(input.enabled),
+        page: optionalInteger(input.page),
+        per_page: optionalInteger(input.perPage),
+      },
     },
     "execute",
   );
@@ -162,7 +184,12 @@ async function listDestinationAddresses(
     context,
     {
       path: `/accounts/${encodeURIComponent(accountId)}/email/routing/addresses`,
-      query: { page: optionalInteger(input.page), per_page: optionalInteger(input.perPage) },
+      query: {
+        direction: optionalString(input.direction),
+        verified: optionalBoolean(input.verified),
+        page: optionalInteger(input.page),
+        per_page: optionalInteger(input.perPage),
+      },
     },
     "execute",
   );
@@ -178,8 +205,9 @@ function buildRuleBody(input: Record<string, unknown>): Record<string, unknown> 
     matchers: normalizeRecords(input.matchers),
     enabled: optionalBoolean(input.enabled),
     name: optionalString(input.name),
-    priority: optionalInteger(input.priority),
+    priority: optionalNumber(input.priority),
     source: optionalString(input.source),
+    owner_worker_tag: optionalString(input.ownerWorkerTag),
   });
 }
 
@@ -189,7 +217,7 @@ function requireInputArray(value: unknown, field: string): unknown[] {
 }
 
 async function requestCloudflare(
-  context: { email?: string; apiKey: string; fetcher: ProviderFetch; signal?: AbortSignal },
+  context: CloudflareAuthContext,
   request: CloudflareRequest,
   phase: "validate" | "execute",
 ): Promise<CloudflareEnvelope> {
@@ -207,21 +235,23 @@ async function requestCloudflare(
 }
 
 function buildHeaders(context: { email?: string; apiKey: string }, hasBody: boolean): Record<string, string> {
+  let headers: Record<string, string>;
   if (context.apiKey.startsWith("cfut_")) {
-    return {
+    headers = {
       accept: "application/json",
       authorization: `Bearer ${context.apiKey}`,
       "user-agent": providerUserAgent,
-      ...(hasBody ? { "content-type": "application/json" } : {}),
+    };
+  } else {
+    headers = {
+      accept: "application/json",
+      "x-auth-email": requireInputString(context.email, "email"),
+      "x-auth-key": context.apiKey,
+      "user-agent": providerUserAgent,
     };
   }
-  return {
-    accept: "application/json",
-    "x-auth-email": requireInputString(context.email, "email"),
-    "x-auth-key": context.apiKey,
-    "user-agent": providerUserAgent,
-    ...(hasBody ? { "content-type": "application/json" } : {}),
-  };
+  if (hasBody) headers["content-type"] = "application/json";
+  return headers;
 }
 
 function buildUrl(path: string, query?: Record<string, string | number | boolean | undefined>): string {
@@ -287,8 +317,9 @@ function normalizeRule(value: unknown, label: string): Record<string, unknown> {
     enabled: optionalBoolean(object.enabled),
     matchers: normalizeRecords(object.matchers),
     name: optionalString(object.name),
-    priority: optionalInteger(object.priority),
+    priority: optionalNumber(object.priority),
     source: optionalString(object.source),
+    ownerWorkerTag: optionalString(object.owner_worker_tag),
     zone: optionalRecord(object.zone),
   });
 }

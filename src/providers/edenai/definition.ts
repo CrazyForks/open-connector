@@ -14,7 +14,7 @@ export const provider: ProviderDefinition = {
       type: "api_key",
       label: "API Key",
       description:
-        "Eden AI API key used with the Authorization Bearer header. Create or manage keys in your Eden AI account at https://app.edenai.run/v2/settings/api.",
+        "Eden AI API key used with the Authorization Bearer header. Create or manage keys in your Eden AI account at https://app.edenai.run/settings/api-keys.",
     },
   ],
   homepageUrl: "https://www.edenai.co",

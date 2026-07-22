@@ -146,10 +146,16 @@ const actions: JiraActionSource[] = [
         issueTypeId: s.string({ minLength: 1, description: "Jira issue type ID." }),
         issueTypeName: s.string({ minLength: 1, description: "Jira issue type name." }),
         summary: s.string({ minLength: 1, description: "Jira issue summary." }),
-        descriptionText: s.string({ minLength: 1, description: "Plain text description converted to ADF." }),
+        descriptionText: s.string({
+          minLength: 1,
+          description: "Plain text description converted to the connected deployment's document format.",
+        }),
         description: adfDocument,
         labels: s.array(s.string({ minLength: 1 }), { minItems: 1, description: "Jira labels." }),
-        assigneeAccountId: s.string({ minLength: 1, description: "Assignee account ID." }),
+        assigneeAccountId: s.string({
+          minLength: 1,
+          description: "Assignee account ID for Jira Cloud or username for Jira Data Center/Server.",
+        }),
         priorityId: s.string({ minLength: 1, description: "Jira priority ID." }),
         dueDate: s.date("Jira due date in YYYY-MM-DD format."),
         parentIssueKey: s.string({ minLength: 1, description: "Parent issue key for subtasks." }),
@@ -181,7 +187,10 @@ const actions: JiraActionSource[] = [
     input(
       {
         issueIdOrKey: s.string({ minLength: 1, description: "Jira issue ID or key." }),
-        bodyText: s.string({ minLength: 1, description: "Plain text comment body converted to ADF." }),
+        bodyText: s.string({
+          minLength: 1,
+          description: "Plain text comment body converted to the connected deployment's document format.",
+        }),
         body: adfDocument,
       },
       ["issueIdOrKey"],

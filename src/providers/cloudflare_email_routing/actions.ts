@@ -1,4 +1,4 @@
-import type { ActionDefinition } from "../../core/types.ts";
+import type { ActionDefinition, JsonSchema } from "../../core/types.ts";
 
 import { s } from "../../core/json-schema.ts";
 import { defineProviderAction } from "../../core/provider-definition.ts";
@@ -36,11 +36,18 @@ const ruleSchema = s.object(
     enabled: s.boolean("Whether the rule is enabled."),
     matchers: s.array("Conditions matching incoming email.", matcherSchema),
     name: s.string("The rule name."),
-    priority: s.nonNegativeInteger("The rule priority."),
+    priority: s.number("The rule priority.", { minimum: 0 }),
     source: s.stringEnum(["api", "wrangler"], { description: "Who manages the rule." }),
+    ownerWorkerTag: s.string({
+      description: "The public script tag of the Worker that owns a Wrangler-managed rule.",
+      maxLength: 32,
+    }),
     zone: s.looseObject("Zone information returned for account rule listings."),
   },
-  { required: ["id"], optional: ["actions", "enabled", "matchers", "name", "priority", "source", "zone"] },
+  {
+    required: ["id"],
+    optional: ["actions", "enabled", "matchers", "name", "priority", "source", "ownerWorkerTag", "zone"],
+  },
 );
 const addressSchema = s.object(
   "A Cloudflare Email Routing destination address. Verified addresses may be used by forward actions.",
@@ -56,32 +63,45 @@ const addressSchema = s.object(
 const resultInfoSchema = s.looseObject("Cloudflare pagination metadata.");
 const paginationFields = {
   page: s.positiveInteger("The result page number."),
-  perPage: s.positiveInteger("The page size."),
+  perPage: s.integer({ description: "The page size.", minimum: 5, maximum: 50 }),
 };
 const ruleFields = {
   actions: s.array("Actions applied to matching email.", actionSchema, { minItems: 1 }),
   matchers: s.array("Conditions matching incoming email.", matcherSchema, { minItems: 1 }),
   enabled: s.boolean("Whether the rule is enabled."),
   name: s.string({ description: "The rule name.", maxLength: 256 }),
-  priority: s.nonNegativeInteger("The rule priority."),
+  priority: s.number("The rule priority.", { minimum: 0 }),
   source: s.stringEnum(["api", "wrangler"], { description: "Who manages the rule." }),
+  ownerWorkerTag: s.string({
+    description: "The public script tag required when source is wrangler.",
+    maxLength: 32,
+  }),
 };
 
 const createInput = s.object(
   "The input payload for this action.",
   { zoneId, ...ruleFields },
-  { required: ["actions", "matchers"], optional: ["zoneId", "enabled", "name", "priority", "source"] },
+  {
+    required: ["actions", "matchers"],
+    optional: ["zoneId", "enabled", "name", "priority", "source", "ownerWorkerTag"],
+  },
 );
 const updateInput = s.object(
   "The input payload for this action.",
   { zoneId, ruleId, ...ruleFields },
-  { required: ["ruleId", "actions", "matchers"], optional: ["zoneId", "enabled", "name", "priority", "source"] },
+  {
+    required: ["ruleId", "actions", "matchers"],
+    optional: ["zoneId", "enabled", "name", "priority", "source", "ownerWorkerTag"],
+  },
 );
-const listRulesInput = s.object(
-  "The input payload for this action.",
-  { zoneId, accountId, ...paginationFields },
-  { optional: ["zoneId", "accountId", "page", "perPage"] },
-);
+const listRulesInput: JsonSchema = {
+  ...s.object(
+    "The input payload for this action. zoneId and accountId are mutually exclusive.",
+    { zoneId, accountId, enabled: s.boolean("Filter by enabled routing rules."), ...paginationFields },
+    { optional: ["zoneId", "accountId", "enabled", "page", "perPage"] },
+  ),
+  not: { required: ["zoneId", "accountId"] },
+};
 
 export const cloudflareEmailRoutingActions: ActionDefinition[] = [
   defineProviderAction(service, {
@@ -136,8 +156,13 @@ export const cloudflareEmailRoutingActions: ActionDefinition[] = [
     providerPermissions: [addressesRead],
     inputSchema: s.object(
       "The input payload for this action.",
-      { accountId, ...paginationFields },
-      { optional: ["accountId", "page", "perPage"] },
+      {
+        accountId,
+        direction: s.stringEnum(["asc", "desc"], { description: "The result sort direction." }),
+        verified: s.boolean("Filter by destination address verification status."),
+        ...paginationFields,
+      },
+      { optional: ["accountId", "direction", "verified", "page", "perPage"] },
     ),
     outputSchema: s.object(
       "The output payload for this action.",
