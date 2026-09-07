@@ -1,9 +1,15 @@
-import type { CredentialValidators, ExecutionContext, ProviderExecutors } from "../../core/types.ts";
+import type {
+  CredentialValidators,
+  ExecutionContext,
+  ProviderExecutors,
+  ProviderProxyExecutor,
+} from "../../core/types.ts";
 import type { ProviderActionHandlers } from "../provider-runtime.ts";
 import type { GmailDraftResource, GmailMessageResource, GmailThreadResource } from "./message.ts";
 
 import {
   defineProviderExecutors,
+  defineProviderProxy,
   ProviderRequestError,
   readProviderJsonBody,
   requireOAuthCredential,
@@ -22,6 +28,7 @@ import {
   summarizeGmailMessage,
 } from "./message.ts";
 
+const service = "gmail";
 const gmailApiBaseUrl = "https://gmail.googleapis.com/gmail/v1";
 const detailHydrationBatchSize = 10;
 const defaultFetchEmailsMaxResults = 20;
@@ -34,7 +41,7 @@ interface ActionContext {
 
 type ActionHandler = (input: Record<string, unknown>, context: ActionContext) => Promise<unknown>;
 
-export const gmailActionHandlers: ProviderActionHandlers<"gmail", ActionHandler> = {
+export const gmailActionHandlers: ProviderActionHandlers<typeof service, ActionHandler> = {
   async search_threads(input, { userId, accessToken, fetcher }) {
     const output = await listThreads(input, userId, accessToken, fetcher);
     return {
@@ -194,12 +201,18 @@ export const gmailActionHandlers: ProviderActionHandlers<"gmail", ActionHandler>
 };
 
 export const executors: ProviderExecutors = defineProviderExecutors<ActionContext>({
-  service: "gmail",
+  service,
   handlers: gmailActionHandlers,
   async createContext(context: ExecutionContext, fetcher: typeof fetch): Promise<ActionContext> {
-    const credential = await requireOAuthCredential(context, "gmail");
+    const credential = await requireOAuthCredential(context, service);
     return { userId: "me", accessToken: credential.accessToken, fetcher };
   },
+});
+
+export const proxy: ProviderProxyExecutor = defineProviderProxy({
+  service,
+  baseUrl: gmailApiBaseUrl,
+  auth: { type: "oauth_bearer" },
 });
 
 export const credentialValidators: CredentialValidators = {
