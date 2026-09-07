@@ -4,6 +4,8 @@ import { Buffer } from "node:buffer";
 import MailComposer from "nodemailer/lib/mail-composer/index.js";
 import { optionalBoolean, optionalNumber } from "../../../core/cast.ts";
 import { providerInputError, ProviderRequestError } from "../../provider-runtime.ts";
+import { extractFeishuMailDraftId, readFeishuMailMessagePage } from "./mail-response.ts";
+import { requireFeishuResponseString } from "./response.ts";
 
 interface MailAdvancedActionHandler {
   (input: Record<string, unknown>): Promise<Record<string, unknown>>;
@@ -80,14 +82,14 @@ async function sendReadReceipt(input: Record<string, unknown>, request: FeishuJs
     html,
     sourceMessageId: messageId,
     smtpMessageId: normalizeSmtpMessageId(source.smtp_message_id),
-    references: stringArray(source.references),
+    references: optionalString(source.references),
   });
   const draftData = await request({
     method: "POST",
     path: mailboxPath(mailboxId, "drafts"),
     body: { raw },
   });
-  const draftId = extractDraftId(draftData);
+  const draftId = extractFeishuMailDraftId(draftData);
   const sent = await request({
     method: "POST",
     path: mailboxPath(mailboxId, "drafts", draftId, "send"),
@@ -152,7 +154,7 @@ async function shareMailToChat(input: Record<string, unknown>, request: FeishuJs
     path: mailboxPath(mailboxId, "messages", "share_token"),
     body: threadId ? { thread_id: threadId } : { message_id: messageId },
   });
-  const cardId = requiredProviderString(created.card_id, "mail share card_id");
+  const cardId = requireFeishuResponseString(created.card_id, "mail share card_id");
   const sent = await request({
     method: "POST",
     path: mailboxPath(mailboxId, "share_tokens", cardId, "send"),
@@ -230,6 +232,8 @@ async function triageMailMessages(input: Record<string, unknown>, request: Feish
 
   const messages: Record<string, unknown>[] = [];
   let pageToken = parsedToken?.token;
+  const seenPageTokens = new Set<string>();
+  if (pageToken) seenPageTokens.add(pageToken);
   let hasMore = false;
   let notice: string | null = null;
   if (useSearch) {
@@ -248,8 +252,8 @@ async function triageMailMessages(input: Record<string, unknown>, request: Feish
       }
       messages.push(...normalizeSearchItems(data.items));
       hasMore = data.has_more === true;
-      pageToken = optionalString(data.page_token);
-      if (!hasMore || !pageToken) break;
+      pageToken = nextTriagePageToken(hasMore, data.page_token, seenPageTokens);
+      if (!pageToken) break;
     }
     messages.splice(maximum);
     if (input.includeLabels === true && messages.length > 0) {
@@ -273,10 +277,11 @@ async function triageMailMessages(input: Record<string, unknown>, request: Feish
           page_token: pageToken,
         },
       });
-      messageIds.push(...extractMessageIds(data.items));
-      hasMore = data.has_more === true;
-      pageToken = optionalString(data.page_token);
-      if (!hasMore || !pageToken) break;
+      const page = readFeishuMailMessagePage(data);
+      messageIds.push(...page.items);
+      hasMore = page.hasMore;
+      pageToken = nextTriagePageToken(hasMore, page.pageToken, seenPageTokens);
+      if (!pageToken) break;
     }
     messageIds.splice(maximum);
     messages.push(...(await batchGetMetadata(mailboxId, messageIds, request)));
@@ -320,7 +325,7 @@ async function fetchMessage(mailboxId: string, messageId: string, request: Feish
 async function resolveMailboxAddress(mailboxId: string, request: FeishuJsonRequest) {
   const data = await request({ path: mailboxPath(mailboxId, "profile") });
   const mailbox = recordValue(data.user_mailbox);
-  return requiredProviderString(
+  return requireFeishuResponseString(
     data.primary_email_address ?? mailbox.primary_email_address,
     "mailbox primary_email_address",
   );
@@ -334,11 +339,11 @@ interface ReceiptComposeInput {
   readonly html: string;
   readonly sourceMessageId: string;
   readonly smtpMessageId?: string;
-  readonly references: string[];
+  readonly references?: string;
 }
 
 async function composeReceiptRaw(input: ReceiptComposeInput) {
-  const references = [...input.references];
+  const references = input.references ? [input.references] : [];
   if (input.smtpMessageId) references.push(input.smtpMessageId);
   const buffer = await new MailComposer({
     from: input.sender,
@@ -554,12 +559,6 @@ function normalizeSearchItems(value: unknown) {
     .filter((item): item is NonNullable<typeof item> => item !== undefined);
 }
 
-function extractMessageIds(value: unknown) {
-  return recordArray(value)
-    .map((item) => optionalString(item.message_id ?? item.id))
-    .filter((item): item is string => Boolean(item));
-}
-
 async function batchGetMetadata(mailboxId: string, messageIds: string[], request: FeishuJsonRequest) {
   const byId = new Map<string, Record<string, unknown>>();
   for (let index = 0; index < messageIds.length; index += 20) {
@@ -589,7 +588,7 @@ function normalizeMessageMetadata(message: Record<string, unknown>) {
     threadId: optionalString(message.thread_id) ?? null,
     subject: optionalString(message.subject) ?? "",
     from: recordValue(message.head_from),
-    date: optionalString(message.date ?? message.internal_date) ?? null,
+    date: optionalNumber(message.internal_date)?.toString() ?? null,
     folderId: optionalString(message.folder_id) ?? null,
     labels: stringArray(message.label_ids),
     raw: message,
@@ -606,6 +605,16 @@ function mergeLabels(messages: Record<string, unknown>[], metadata: Record<strin
 interface TriageToken {
   readonly source: "list" | "search";
   readonly token: string;
+}
+
+function nextTriagePageToken(hasMore: boolean, value: unknown, seenPageTokens: Set<string>) {
+  if (!hasMore) return undefined;
+  const token = requireFeishuResponseString(value, "page_token");
+  if (seenPageTokens.has(token)) {
+    throw new ProviderRequestError(502, "Feishu mail pagination returned a repeated page_token");
+  }
+  seenPageTokens.add(token);
+  return token;
 }
 
 function parseTriageToken(value: string | undefined): TriageToken | undefined {
@@ -626,11 +635,6 @@ function assignIfPresent(
   sourceKey: string,
 ) {
   if (sourceKey in source) target[targetKey] = source[sourceKey];
-}
-
-function extractDraftId(data: Record<string, unknown>) {
-  const draft = recordValue(data.draft);
-  return requiredProviderString(data.draft_id ?? data.id ?? draft.draft_id, "draft_id");
 }
 
 function mailboxPath(mailboxId: string, ...parts: string[]) {
@@ -673,14 +677,6 @@ function compact(value: Record<string, unknown>) {
 function requiredString(value: unknown, field: string) {
   const result = optionalString(value);
   if (!result) throw providerInputError(`${field} must be a non-empty string`);
-  return result;
-}
-
-function requiredProviderString(value: unknown, field: string) {
-  const result = optionalString(value);
-  if (!result) {
-    throw new ProviderRequestError(502, `Feishu response is missing ${field}`);
-  }
   return result;
 }
 

@@ -103,6 +103,7 @@ const emptyInputSchema = s.object("No input is required.", {});
 const managementOutputSchema = s.object("The result of one file operation.", {
   sourcePath: s.string("The absolute source path supplied by the caller."),
   path: nullableString("The resulting absolute path, or null when Baidu omits it."),
+  rawResponse: nullableString("The original successful MCP text response when it is not valid JSON, or null."),
 });
 
 const downloadedFileSchema = s.requiredObject("A downloaded Baidu Netdisk file stored in local transit storage.", {

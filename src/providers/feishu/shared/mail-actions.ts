@@ -106,14 +106,21 @@ export function createFeishuMailActions(service: string): readonly ActionDefinit
           folderId: s.string("The folder ID. Defaults to `INBOX`.", { minLength: 1 }),
           labelId: s.string("A label ID. It cannot be combined with folderId.", { minLength: 1 }),
           onlyUnread: s.boolean("Whether to return unread messages only."),
-          pageSize,
+          pageSize: s.integer("The maximum number of messages to return. Defaults to 20.", {
+            minimum: 1,
+            maximum: 20,
+          }),
           pageToken,
         },
         {
           optional: ["mailboxId", "folderId", "labelId", "onlyUnread", "pageSize", "pageToken"],
         },
       ),
-      outputSchema: pageOutput,
+      outputSchema: s.object("A page of Feishu mail message IDs.", {
+        items: s.array("The message IDs returned on this page.", messageId),
+        hasMore: s.boolean("Whether another page is available."),
+        pageToken: s.nullableString("The token for the next page."),
+      }),
     }),
     defineProviderAction(service, {
       name: "search_mail_messages",

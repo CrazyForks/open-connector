@@ -1,7 +1,8 @@
 import type { FeishuJsonRequest } from "./client.ts";
 
-import { optionalNumber } from "../../../core/cast.ts";
+import { optionalNumber, optionalRecord } from "../../../core/cast.ts";
 import { providerInputError } from "../../provider-runtime.ts";
+import { requireFeishuResponseId } from "./response.ts";
 
 interface OkrActionHandler {
   (input: Record<string, unknown>): Promise<unknown>;
@@ -51,7 +52,7 @@ async function getCycleDetail(input: Record<string, unknown>, request: FeishuJso
   });
   const enriched = await Promise.all(
     objectives.map(async (objective) => {
-      const objectiveId = requiredString(objective.objective_id ?? objective.id, "objective_id");
+      const objectiveId = requireFeishuResponseId(objective.id, "objective.id");
       const keyResults = await fetchAllPages(request, `/okr/v2/objectives/${encode(objectiveId)}/key_results`, {
         objective_id: objectiveId,
         user_id_type: userIdType,
@@ -205,7 +206,7 @@ async function createAlignment(input: Record<string, unknown>, request: FeishuJs
     },
   });
   return {
-    alignmentId: requiredString(data.alignment_id, "alignment_id"),
+    alignmentId: requireFeishuResponseId(data.alignment_id, "alignment_id"),
     raw: data,
   };
 }
@@ -348,10 +349,9 @@ async function updateIndicator(input: Record<string, unknown>, request: FeishuJs
   const targetId = requiredString(input.targetId, "targetId");
   const indicators = await request({
     path: `/okr/v2/${targetType === "objective" ? "objectives" : "key_results"}/${encode(targetId)}/indicators`,
-    query: { page_size: 1 },
   });
-  const indicator = recordArray(indicators.items ?? indicators.indicators)[0];
-  const indicatorId = requiredString(indicator?.indicator_id ?? indicator?.id, "indicator_id");
+  const indicator = optionalRecord(indicators.indicator);
+  const indicatorId = requireFeishuResponseId(indicator?.id, "indicator.id");
   const currentValue = requiredNumber(input.currentValue, "currentValue");
   await request({
     method: "PATCH",
@@ -428,7 +428,7 @@ function progressRate(percent: unknown, status: unknown) {
 }
 
 function extractTargetId(data: Record<string, unknown>, type: "objective" | "key_result") {
-  return requiredString(data[type === "objective" ? "objective_id" : "key_result_id"], `${type}_id`);
+  return requireFeishuResponseId(data[type === "objective" ? "objective_id" : "key_result_id"], `${type}_id`);
 }
 
 function requiredTargetType(value: unknown): "objective" | "key_result" {

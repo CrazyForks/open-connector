@@ -14,7 +14,6 @@ import {
 
 const service = "clickup_mcp";
 const endpoint = "https://mcp.clickup.com/mcp";
-const requestTimeoutMs = 60_000;
 const toolsByAction: ProviderActionSources<typeof service, string> = {
   search_workspace: "clickup_search",
   get_task: "clickup_get_task",
@@ -32,7 +31,7 @@ const handlers = mapProviderActionSources(
   (_actionName, toolName): ProviderRuntimeHandler<OAuthProviderContext> =>
     async (input, context) => {
       const result = await withClickUpMcpClient(context, "execute", (client) =>
-        client.callTool({ name: toolName, arguments: input }, { timeout: requestTimeoutMs, signal: context.signal }),
+        client.callTool({ name: toolName, arguments: input }, { signal: context.signal }),
       );
       if (!("toolResult" in result) && result.isError) {
         throw new ProviderRequestError(502, `ClickUp MCP tool ${toolName} returned an error`, result);
@@ -53,7 +52,7 @@ export const credentialValidators: CredentialValidators = {
     const tools = await withClickUpMcpClient(
       { accessToken: input.accessToken, fetcher, signal },
       "validate",
-      (client) => client.listTools({}, { timeout: requestTimeoutMs, signal }),
+      (client) => client.listTools({}, { signal }),
     );
     const available = new Set(tools.tools.map((tool) => tool.name));
     if (!Object.values(toolsByAction).some((name) => available.has(name))) {

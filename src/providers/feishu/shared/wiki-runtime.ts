@@ -2,6 +2,7 @@ import type { FeishuJsonRequest } from "./client.ts";
 
 import { optionalBoolean, optionalNumber } from "../../../core/cast.ts";
 import { providerInputError } from "../../provider-runtime.ts";
+import { requireFeishuResponseString } from "./response.ts";
 
 interface WikiActionHandler {
   (input: Record<string, unknown>): Promise<unknown>;
@@ -194,7 +195,7 @@ async function submitMoveToDrive(input: Record<string, unknown>, request: Feishu
     body: compact({ folder_token: folderToken }),
   });
   return {
-    taskId: requiredString(data.task_id, "task_id"),
+    taskId: requireFeishuResponseString(data.task_id, "task_id"),
     nodeToken,
     folderToken: folderToken ?? null,
   };

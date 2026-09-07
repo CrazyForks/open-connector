@@ -81,7 +81,7 @@ const queryTraceOutputSchema = s.object(
 const autoNumberOutputSchema = s.object(
   "The carriers that could own the tracking number.",
   {
-    companies: s.array(
+    data: s.array(
       "The candidate carriers for the tracking number.",
       s.requiredObject("One candidate carrier.", {
         comCode: s.string("The Kuaidi100 carrier code."),
@@ -130,12 +130,34 @@ const estimatePriceOutputSchema = s.object(
   { optional: ["tips"] },
 );
 
+const orderCarrierSchema = s.stringEnum("The carrier code used for pickup orders.", [
+  "jd",
+  "debangkuaidi",
+  "shunfeng",
+  "yuantong",
+  "zhongtong",
+  "shunfengkuaiyun",
+  "sxjdfreight",
+  "kuayue",
+  "ems",
+]);
+const contactSchema = s.requiredObject("A sender or recipient contact.", {
+  name: s.nonEmptyString("The contact name."),
+  mobile: s.nonEmptyString("The contact mobile number."),
+  address: s.nonEmptyString("The full contact address."),
+});
+const orderOutputSchema = s.looseObject("The parsed JSON object returned by Kuaidi100.", {
+  data: s.unknown("The provider-defined response payload."),
+  code: s.string("The provider business status code."),
+  message: s.string("The provider response message."),
+});
+
 const estimateTimeInputProperties = {
-  kuaidi_com: timeEstimateCarrierSchema,
-  from_loc: s.nonEmptyString("The origin address, for example 广东省深圳市南山区."),
-  to_loc: s.nonEmptyString("The destination address, for example 北京市海淀区."),
-  order_time: orderTimeSchema,
-  exp_type: expTypeSchema,
+  carrier: timeEstimateCarrierSchema,
+  origin: s.nonEmptyString("The origin address, for example 广东省深圳市南山区."),
+  destination: s.nonEmptyString("The destination address, for example 北京市海淀区."),
+  orderTime: orderTimeSchema,
+  productType: expTypeSchema,
 };
 
 export const kuaidi100Actions: ActionDefinition[] = [
@@ -147,7 +169,7 @@ export const kuaidi100Actions: ActionDefinition[] = [
     inputSchema: s.object(
       "The tracking number whose trajectory should be queried.",
       {
-        kuaidi_num: trackingNumberSchema,
+        trackingNumber: trackingNumberSchema,
         phone: s.nonEmptyString(
           "The sender or recipient phone number; required only for SF Express (顺丰), SF Freight (顺丰快运), and ZTO (中通) shipments.",
         ),
@@ -162,7 +184,7 @@ export const kuaidi100Actions: ActionDefinition[] = [
     description: "Detect the likely express carriers for a tracking number from its format.",
     requiredScopes: [],
     inputSchema: s.requiredObject("The tracking number to identify.", {
-      kuaidi_num: trackingNumberSchema,
+      trackingNumber: trackingNumberSchema,
     }),
     outputSchema: autoNumberOutputSchema,
     followUpActions: ["kuaidi100.query_trace"],
@@ -173,7 +195,7 @@ export const kuaidi100Actions: ActionDefinition[] = [
       "Estimate the delivery time for a shipment before it is sent, from the carrier, origin, destination, and optional order time and product type.",
     requiredScopes: [],
     inputSchema: s.object("The shipment whose delivery time should be estimated.", estimateTimeInputProperties, {
-      optional: ["order_time", "exp_type"],
+      optional: ["orderTime", "productType"],
     }),
     outputSchema: estimateTimeOutputSchema,
   }),
@@ -185,8 +207,11 @@ export const kuaidi100Actions: ActionDefinition[] = [
     inputSchema: s.object(
       "The in-transit shipment whose arrival time should be estimated.",
       {
-        ...estimateTimeInputProperties,
-        logistic: s.array(
+        carrier: timeEstimateCarrierSchema,
+        origin: s.nonEmptyString("The origin address, for example 广东省深圳市南山区."),
+        destination: s.nonEmptyString("The destination address, for example 北京市海淀区."),
+        orderTime: orderTimeSchema,
+        trajectory: s.array(
           "The historical logistics trajectory events, usually the data returned by kuaidi100.query_trace.",
           logisticEventSchema,
           {
@@ -194,7 +219,7 @@ export const kuaidi100Actions: ActionDefinition[] = [
           },
         ),
       },
-      { optional: ["order_time", "exp_type"] },
+      { optional: [] },
     ),
     outputSchema: estimateTimeOutputSchema,
   }),
@@ -203,11 +228,78 @@ export const kuaidi100Actions: ActionDefinition[] = [
     description: "Estimate the shipping price for a carrier, sender and recipient addresses, and parcel weight.",
     requiredScopes: [],
     inputSchema: s.requiredObject("The shipment whose price should be estimated.", {
-      kuaidi_com: priceEstimateCarrierSchema,
-      send_addr: s.nonEmptyString("The sender address, for example 北京市海淀区."),
-      rec_addr: s.nonEmptyString("The recipient address, for example 广东省深圳市南山区."),
-      weight: s.number("The parcel weight in kilograms.", { exclusiveMinimum: 0 }),
+      carrier: priceEstimateCarrierSchema,
+      senderAddress: s.nonEmptyString("The sender address, for example 北京市海淀区."),
+      recipientAddress: s.nonEmptyString("The recipient address, for example 广东省深圳市南山区."),
+      weightKg: s.number("The parcel weight in kilograms.", { exclusiveMinimum: 0 }),
     }),
     outputSchema: estimatePriceOutputSchema,
+  }),
+  defineProviderAction(service, {
+    name: "order_price",
+    description:
+      "Quote a pickup order before creating it. This uses the pickup-order pricing service, not the general estimate_price calculation.",
+    requiredScopes: [],
+    inputSchema: s.object(
+      "The pickup order to quote.",
+      {
+        carrier: orderCarrierSchema,
+        senderAddress: s.nonEmptyString("The sender address, at least to city level."),
+        recipientAddress: s.nonEmptyString("The recipient address, at least to city level."),
+        weightKg: s.number("The parcel weight in kilograms.", { exclusiveMinimum: 0 }),
+        serviceType: s.nonEmptyString("The carrier service type, such as 顺丰标快."),
+      },
+      { optional: ["carrier", "weightKg", "serviceType"] },
+    ),
+    outputSchema: orderOutputSchema,
+  }),
+  defineProviderAction(service, {
+    name: "create_order",
+    description: "Create a pay-offline pickup order after obtaining an order_price quote.",
+    requiredScopes: [],
+    inputSchema: s.object(
+      "The pickup order to create.",
+      {
+        carrier: orderCarrierSchema,
+        sender: contactSchema,
+        recipient: contactSchema,
+        itemName: s.nonEmptyString("The item name, such as 文件."),
+        weightKg: s.number("The parcel weight in kilograms.", { exclusiveMinimum: 0 }),
+        payment: s.stringEnum("Who pays the shipping fee.", ["SHIPPER", "CONSIGNEE"]),
+        pickupDay: s.stringEnum("The requested pickup day.", ["今天", "明天", "后天"]),
+        pickupStartTime: s.string("The pickup window start time in HH:mm format."),
+        pickupEndTime: s.string("The pickup window end time in HH:mm format."),
+        remark: s.string("An optional order note."),
+      },
+      { optional: ["weightKg", "payment", "pickupDay", "pickupStartTime", "pickupEndTime", "remark"] },
+    ),
+    outputSchema: orderOutputSchema,
+    followUpActions: ["kuaidi100.query_order"],
+  }),
+  defineProviderAction(service, {
+    name: "query_order",
+    description: "Get a pickup order and optionally include its logistics trajectory.",
+    requiredScopes: [],
+    inputSchema: s.object(
+      "The pickup order to retrieve.",
+      {
+        orderId: s.nonEmptyString("The Kuaidi100 pickup order ID."),
+        includeTracking: s.boolean("Whether to include the logistics trajectory."),
+        phone: s.string("The phone number needed by carriers such as SF Express or ZTO."),
+      },
+      { optional: ["includeTracking", "phone"] },
+    ),
+    outputSchema: orderOutputSchema,
+    followUpActions: ["kuaidi100.cancel_order"],
+  }),
+  defineProviderAction(service, {
+    name: "cancel_order",
+    description: "Cancel a pickup order that is no longer needed.",
+    requiredScopes: [],
+    inputSchema: s.requiredObject("The pickup order cancellation.", {
+      orderId: s.nonEmptyString("The Kuaidi100 pickup order ID."),
+      reason: s.string("The cancellation reason, up to 30 characters.", { minLength: 1, maxLength: 30 }),
+    }),
+    outputSchema: orderOutputSchema,
   }),
 ];

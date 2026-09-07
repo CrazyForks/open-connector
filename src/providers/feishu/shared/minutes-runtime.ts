@@ -2,6 +2,7 @@ import type { FeishuJsonRequest } from "./client.ts";
 
 import { optionalNumber } from "../../../core/cast.ts";
 import { providerInputError } from "../../provider-runtime.ts";
+import { requireFeishuResponseString } from "./response.ts";
 
 interface MinutesActionHandler {
   (input: Record<string, unknown>): Promise<unknown>;
@@ -185,7 +186,7 @@ async function getDownloadMetadata(input: Record<string, unknown>, request: Feis
   const data = await request({ path: `/minutes/v1/minutes/${encode(token)}/media` });
   return {
     minuteToken: token,
-    downloadUrl: requiredString(data.download_url, "download_url"),
+    downloadUrl: requireFeishuResponseString(data.download_url, "download_url"),
     raw: data,
   };
 }
