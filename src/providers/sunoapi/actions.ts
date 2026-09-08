@@ -8,6 +8,10 @@ const service = "sunoapi";
 const taskIdSchema = s.nonEmptyString("The SunoAPI task identifier.");
 const audioIdSchema = s.nonEmptyString("The SunoAPI audio identifier.");
 const callbackUrlSchema = s.url("The callback URL used to receive completed results.");
+const marketplaceCallbackUrlSchema = s.anyOf(
+  "The callback URL, or an empty string to use the Fusion-managed callback with Marketplace.",
+  [callbackUrlSchema, s.literal("", { description: "Use the Fusion-managed callback with Marketplace." })],
+);
 const generationModelSchema = s.stringEnum("The SunoAPI music generation model.", [
   "V4",
   "V4_5",
@@ -19,6 +23,14 @@ const generationModelSchema = s.stringEnum("The SunoAPI music generation model."
 const personaModelSchema = s.stringEnum("The SunoAPI persona model.", ["style_persona", "voice_persona"]);
 const weightSchema = (description: string) => s.number(description, { minimum: 0, maximum: 1 });
 const taskOutputSchema = s.object("SunoAPI task submission response.", { taskId: taskIdSchema });
+const musicTaskOutputSchema = s.object(
+  "SunoAPI music task submission response.",
+  {
+    taskId: taskIdSchema,
+    callbackTaskId: s.nonEmptyString("The upstream task identifier included in SunoAPI callbacks."),
+  },
+  { optional: ["callbackTaskId"] },
+);
 const detailsOutputSchema = s.looseObject("SunoAPI task details payload.");
 const objectOutputSchema = s.looseObject("SunoAPI object response.");
 
@@ -59,23 +71,36 @@ export const sunoapiActions: ActionDefinition[] = [
   defineProviderAction(service, {
     name: "generate_music",
     description: "Submit a SunoAPI music generation task.",
-    inputSchema: inputSchema("The input payload for submitting a SunoAPI music generation task.", musicPromptFields, [
-      "prompt",
-      "style",
-      "title",
-      "personaId",
-      "personaModel",
-      "negativeTags",
-      "vocalGender",
-      "styleWeight",
-      "weirdnessConstraint",
-      "audioWeight",
-    ]),
-    outputSchema: taskOutputSchema,
+    followUpActions: ["sunoapi.get_music_generation_details"],
+    asyncLifecycle: {
+      startActionId: "sunoapi.generate_music",
+      statusActionId: "sunoapi.get_music_generation_details",
+    },
+    inputSchema: inputSchema(
+      "The input payload for submitting a SunoAPI music generation task.",
+      { ...musicPromptFields, callBackUrl: marketplaceCallbackUrlSchema },
+      [
+        "prompt",
+        "style",
+        "title",
+        "personaId",
+        "personaModel",
+        "negativeTags",
+        "vocalGender",
+        "styleWeight",
+        "weirdnessConstraint",
+        "audioWeight",
+      ],
+    ),
+    outputSchema: musicTaskOutputSchema,
   }),
   defineProviderAction(service, {
     name: "get_music_generation_details",
     description: "Fetch SunoAPI music generation task details.",
+    asyncLifecycle: {
+      startActionId: "sunoapi.generate_music",
+      statusActionId: "sunoapi.get_music_generation_details",
+    },
     inputSchema: taskIdInputSchema,
     outputSchema: detailsOutputSchema,
   }),

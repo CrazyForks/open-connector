@@ -23,6 +23,12 @@ export const sunoapiActionHandlers: ProviderActionHandlers<"sunoapi", SunoApiAct
     return getRemainingCredits(context, "execute");
   },
   generate_music(input, context) {
+    if (!optionalString(input.callBackUrl)) {
+      throw new ProviderRequestError(
+        400,
+        "callBackUrl is required for a SunoAPI API key connection; use Marketplace to delegate callbacks",
+      );
+    }
     return submitSunoApiTask(input, context, "/api/v1/generate", "sunoapi music generation");
   },
   get_music_generation_details(input, context) {
