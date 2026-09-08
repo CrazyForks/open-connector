@@ -51,6 +51,8 @@ interface SeedanceToolInput {
 export interface SeedanceSubmitInput {
   model: string;
   prompt?: string;
+  omniReferenceTaskType?: "auto" | "reference" | "edit" | "extend";
+  outputFormat?: "mp4" | "mov";
   images: SeedanceImageInput[];
   videos: SeedanceVideoInput[];
   audios: SeedanceAudioInput[];
@@ -172,6 +174,13 @@ export function readSeedanceSubmitInput(input: Record<string, unknown>): Seedanc
   return {
     model,
     prompt,
+    omniReferenceTaskType: readEnum(input.omniReferenceTaskType, "omniReferenceTaskType", [
+      "auto",
+      "reference",
+      "edit",
+      "extend",
+    ]),
+    outputFormat: readEnum(input.outputFormat, "outputFormat", ["mp4", "mov"]),
     images,
     videos,
     audios,
@@ -203,6 +212,8 @@ export function buildSeedanceSubmitBody(input: SeedanceSubmitInput): Record<stri
   return compactObject({
     model: input.model,
     content,
+    omni_reference_task_type: input.omniReferenceTaskType,
+    output_format: input.outputFormat,
     return_last_frame: input.returnLastFrame,
     execution_expires_after: input.executionExpiresAfter,
     generate_audio: input.generateAudio,
@@ -386,7 +397,9 @@ function requireArkInteger(value: unknown, field: string): number {
   return integer;
 }
 
-function readEnum<T extends string>(value: unknown, field: string, values: readonly T[], fallback: T): T {
+function readEnum<T extends string>(value: unknown, field: string, values: readonly T[], fallback: T): T;
+function readEnum<T extends string>(value: unknown, field: string, values: readonly T[]): T | undefined;
+function readEnum<T extends string>(value: unknown, field: string, values: readonly T[], fallback?: T): T | undefined {
   if (value === undefined) return fallback;
   if (typeof value === "string" && values.includes(value as T)) return value as T;
   throw new ProviderRequestError(400, `${field} is invalid`);

@@ -7,7 +7,7 @@ const maxStringLength = 256;
 const maxArrayLength = 20;
 const maxObjectKeys = 50;
 const sensitiveKeyPattern =
-  /access[-_]?key|api[-_]?key|authorization|client[-_]?secret|cookie|credential|password|private[-_]?key|refresh[-_]?token|secret|session|signature|token/i;
+  /access[-_]?key|account[-_]?key|api[-_]?key|authorization|client[-_]?secret|cookie|credential|password|private[-_]?key|refresh[-_]?token|secret|session|signature|token/i;
 const sensitiveContextPattern = /(^|\.)(cookies?|credentials?|headers?|secrets?)(\.|$)/i;
 const credentialValuePattern = /^(?:Basic|Bearer)\s+\S+|^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/i;
 const sensitiveUrlContextPattern = /callback|download|presigned|signed|temporary|webhook/i;

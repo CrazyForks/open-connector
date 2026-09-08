@@ -2420,6 +2420,20 @@ export const fusionApiOperations: FusionApiOperation[] = [
         description: "Video generation prompt",
       },
       {
+        name: "omniReferenceTaskType",
+        kind: "string",
+        required: false,
+        description: "All-modal reference task type guidance",
+        enumValues: ["auto", "reference", "edit", "extend"],
+      },
+      {
+        name: "outputFormat",
+        kind: "string",
+        required: false,
+        description: "Output video file format",
+        enumValues: ["mp4", "mov"],
+      },
+      {
         name: "images",
         kind: "array",
         required: false,

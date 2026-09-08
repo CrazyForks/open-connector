@@ -1,7 +1,7 @@
 import { createAwsSigV4PresignedUrl, encodeRfc3986, encodeS3ObjectKey, sha256Hex } from "../../core/aws-sigv4.ts";
 import { assertPublicHttpUrl } from "../../core/request.ts";
 import { ProviderRequestError } from "../provider-runtime.ts";
-import { cloudflareR2Jurisdictions } from "./actions.ts";
+import { cloudflareR2Jurisdictions } from "./schemas.ts";
 
 const r2S3Region = "auto";
 const r2S3Service = "s3";
@@ -111,7 +111,7 @@ function buildCloudflareR2S3Host(accountId: string, jurisdiction: string | undef
   if (!jurisdiction || jurisdiction === "default") {
     return `${accountId}.r2.cloudflarestorage.com`;
   }
-  const allowedJurisdictions = cloudflareR2Jurisdictions as readonly string[];
+  const allowedJurisdictions = cloudflareR2Jurisdictions;
   if (!allowedJurisdictions.includes(jurisdiction)) {
     throw new ProviderRequestError(400, `jurisdiction must be one of ${allowedJurisdictions.join(", ")}`);
   }

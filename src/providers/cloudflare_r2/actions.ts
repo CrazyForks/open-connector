@@ -2,11 +2,14 @@ import type { ActionDefinition, JsonSchema } from "../../core/types.ts";
 
 import { s } from "../../core/json-schema.ts";
 import { defineProviderAction } from "../../core/provider-definition.ts";
+import { cloudflareR2AccountActions } from "./actions-account.ts";
+import { cloudflareR2BucketSettingsActions } from "./actions-bucket-settings.ts";
+import { cloudflareR2DomainActions } from "./actions-domains.ts";
+import { cloudflareR2EventNotificationActions } from "./actions-event-notifications.ts";
+import { cloudflareR2ObjectActions } from "./actions-objects.ts";
+import { cloudflareR2Jurisdictions } from "./schemas.ts";
 
 const service = "cloudflare_r2";
-
-/** The jurisdictions R2 accepts in the `cf-r2-jurisdiction` header and in the S3 endpoint host. */
-export const cloudflareR2Jurisdictions = ["default", "eu", "fedramp", "us"] as const;
 
 const r2ReadScope = "workers-r2.read";
 const r2WriteScope = "workers-r2.write";
@@ -112,7 +115,7 @@ const updateBucketInputSchema = s.object(
 ) as JsonSchema;
 updateBucketInputSchema.anyOf = [{ required: ["storageClass"] }, { required: ["jurisdiction"] }];
 
-export const cloudflareR2Actions: ActionDefinition[] = [
+const cloudflareR2CoreActions: ActionDefinition[] = [
   defineProviderAction(service, {
     name: "list_accounts",
     description: "List Cloudflare accounts visible to the current credential.",
@@ -383,4 +386,13 @@ export const cloudflareR2Actions: ActionDefinition[] = [
       ),
     }),
   }),
+];
+
+export const cloudflareR2Actions: ActionDefinition[] = [
+  ...cloudflareR2CoreActions,
+  ...cloudflareR2ObjectActions,
+  ...cloudflareR2DomainActions,
+  ...cloudflareR2BucketSettingsActions,
+  ...cloudflareR2EventNotificationActions,
+  ...cloudflareR2AccountActions,
 ];

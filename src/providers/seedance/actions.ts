@@ -18,6 +18,13 @@ const modelSchema: JsonSchema = {
   examples: [defaultSeedanceModel],
 };
 const resolutionSchema = s.stringEnum("The generated video resolution.", ["480p", "720p", "1080p"]);
+const omniReferenceTaskTypeSchema = s.stringEnum("Guide Seedance 2.5 when classifying an all-modal reference task.", [
+  "auto",
+  "reference",
+  "edit",
+  "extend",
+]);
+const outputFormatSchema = s.stringEnum("The generated video file format.", ["mp4", "mov"]);
 const ratioSchema = s.stringEnum("The generated video aspect ratio.", [
   "16:9",
   "4:3",
@@ -164,9 +171,11 @@ const submitInputSchema = s.requireAnyProperty(
     {
       model: modelSchema,
       prompt: s.string("The video generation prompt.", { minLength: 1, maxLength: 1000 }),
-      images: s.array("Image inputs for Seedance.", imageSchema, { maxItems: 9 }),
-      videos: s.array("Reference video inputs for Seedance.", videoSchema, { maxItems: 3 }),
-      audios: s.array("Reference audio inputs for Seedance.", audioSchema, { maxItems: 3 }),
+      omniReferenceTaskType: omniReferenceTaskTypeSchema,
+      outputFormat: outputFormatSchema,
+      images: s.array("Image inputs for Seedance.", imageSchema),
+      videos: s.array("Reference video inputs for Seedance.", videoSchema),
+      audios: s.array("Reference audio inputs for Seedance.", audioSchema),
       returnLastFrame: s.withDefault(s.boolean("Whether to return the generated video's final frame."), false),
       executionExpiresAfter: s.integer("The task expiration threshold in seconds.", {
         minimum: 3600,
@@ -183,14 +192,12 @@ const submitInputSchema = s.requireAnyProperty(
       }),
       resolution: s.withDefault(resolutionSchema, "720p"),
       ratio: s.withDefault(ratioSchema, "adaptive"),
-      duration: {
-        description: "The video duration in seconds: -1 for automatic selection, or an integer from 4 through 15.",
-        anyOf: [
-          { const: -1, type: "integer" },
-          { type: "integer", minimum: 4, maximum: 15 },
-        ],
-        default: 5,
-      },
+      duration: s.withDefault(
+        s.integer(
+          "The video duration in seconds. Supported values depend on the selected model; -1 lets the model choose.",
+        ),
+        5,
+      ),
       seed: s.integer("The random seed, or -1 for a random seed.", { minimum: -1, maximum: 4294967295 }),
       watermark: s.withDefault(s.boolean("Whether the generated video should contain a watermark."), false),
     },

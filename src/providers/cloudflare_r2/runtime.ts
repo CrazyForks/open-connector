@@ -1,7 +1,6 @@
 import type { CredentialValidationResult, TransitFileWriter } from "../../core/types.ts";
 import type { CloudflareCurrentUser } from "../cloudflare-current-user.ts";
-import type { ProviderActionHandlers } from "../provider-runtime.ts";
-import type { ProviderRuntimeHandler } from "../provider-runtime.ts";
+import type { ProviderActionHandlers, ProviderRuntimeHandler } from "../provider-runtime.ts";
 import type { CloudflareR2PresignedMethod } from "./s3-presign.ts";
 
 import {
@@ -17,12 +16,18 @@ import {
 import { assertPublicHttpUrl, queryParams, readBoundedResponseBytes } from "../../core/request.ts";
 import { readCloudflareCurrentUser } from "../cloudflare-current-user.ts";
 import {
+  combineProviderActionHandlers,
   providerFetch,
   providerInputError,
   ProviderRequestError,
   providerUserAgent,
   runProviderRequest,
 } from "../provider-runtime.ts";
+import { cloudflareR2AccountActionHandlers } from "./runtime-account.ts";
+import { cloudflareR2BucketSettingsActionHandlers } from "./runtime-bucket-settings.ts";
+import { cloudflareR2DomainActionHandlers } from "./runtime-domains.ts";
+import { cloudflareR2EventNotificationActionHandlers } from "./runtime-event-notifications.ts";
+import { cloudflareR2ObjectActionHandlers } from "./runtime-objects.ts";
 import { createCloudflareR2PresignedUrl, deriveCloudflareR2S3SecretAccessKey } from "./s3-presign.ts";
 
 export interface CloudflareR2Context {
@@ -62,44 +67,52 @@ export const cloudflareR2ApiBaseUrl = "https://api.cloudflare.com/client/v4";
 export const cloudflareR2ActionHandlers: ProviderActionHandlers<
   "cloudflare_r2",
   ProviderRuntimeHandler<CloudflareR2Context>
-> = {
-  list_accounts(input, context) {
-    return listAccounts(input, context);
+> = combineProviderActionHandlers(
+  "cloudflare_r2",
+  cloudflareR2ObjectActionHandlers,
+  cloudflareR2DomainActionHandlers,
+  cloudflareR2BucketSettingsActionHandlers,
+  cloudflareR2EventNotificationActionHandlers,
+  cloudflareR2AccountActionHandlers,
+  {
+    list_accounts(input, context) {
+      return listAccounts(input, context);
+    },
+    list_buckets(input, context) {
+      return listBuckets(input, context);
+    },
+    get_bucket(input, context) {
+      return getBucket(input, context);
+    },
+    download_object(input, context) {
+      return downloadObject(input, context);
+    },
+    create_bucket(input, context) {
+      return createBucket(input, context);
+    },
+    update_bucket(input, context) {
+      return updateBucket(input, context);
+    },
+    delete_bucket(input, context) {
+      return deleteBucket(input, context);
+    },
+    get_bucket_cors_policy(input, context) {
+      return getBucketCorsPolicy(input, context);
+    },
+    update_bucket_cors_policy(input, context) {
+      return updateBucketCorsPolicy(input, context);
+    },
+    delete_bucket_cors_policy(input, context) {
+      return deleteBucketCorsPolicy(input, context);
+    },
+    put_object(input, context) {
+      return putObject(input, context);
+    },
+    generate_presigned_url(input, context) {
+      return generatePresignedUrl(input, context);
+    },
   },
-  list_buckets(input, context) {
-    return listBuckets(input, context);
-  },
-  get_bucket(input, context) {
-    return getBucket(input, context);
-  },
-  download_object(input, context) {
-    return downloadObject(input, context);
-  },
-  create_bucket(input, context) {
-    return createBucket(input, context);
-  },
-  update_bucket(input, context) {
-    return updateBucket(input, context);
-  },
-  delete_bucket(input, context) {
-    return deleteBucket(input, context);
-  },
-  get_bucket_cors_policy(input, context) {
-    return getBucketCorsPolicy(input, context);
-  },
-  update_bucket_cors_policy(input, context) {
-    return updateBucketCorsPolicy(input, context);
-  },
-  delete_bucket_cors_policy(input, context) {
-    return deleteBucketCorsPolicy(input, context);
-  },
-  put_object(input, context) {
-    return putObject(input, context);
-  },
-  generate_presigned_url(input, context) {
-    return generatePresignedUrl(input, context);
-  },
-};
+);
 
 export async function validateCloudflareR2Credential(
   values: Record<string, string>,
@@ -213,7 +226,7 @@ async function getBucket(input: Record<string, unknown>, context: CloudflareR2Co
     context,
     {
       path: `/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}`,
-      headers: buildJurisdictionHeaders(input),
+      headers: buildR2JurisdictionHeaders(input),
     },
     "execute",
   );
@@ -231,7 +244,7 @@ async function downloadObject(input: Record<string, unknown>, context: Cloudflar
   const bucketName = requiredString(input.bucketName, "bucketName", providerInputError);
   const objectKey = readObjectKey(input);
   const url = buildCloudflareR2Url(
-    `/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}/objects/${encodeR2ObjectKey(objectKey)}`,
+    `/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}/objects/${encodeR2ObjectKeyPath(objectKey)}`,
   );
   const headers: Record<string, string> = {
     accept: "*/*",
@@ -281,7 +294,7 @@ async function createBucket(input: Record<string, unknown>, context: CloudflareR
         locationHint: optionalString(input.locationHint),
       }),
       headers: {
-        ...buildJurisdictionHeaders(input),
+        ...buildR2JurisdictionHeaders(input),
         "cf-r2-storage-class": optionalString(input.storageClass),
       },
     },
@@ -304,7 +317,7 @@ async function updateBucket(input: Record<string, unknown>, context: CloudflareR
       method: "PATCH",
       path: `/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}`,
       headers: {
-        ...buildJurisdictionHeaders(input),
+        ...buildR2JurisdictionHeaders(input),
         "cf-r2-storage-class": optionalString(input.storageClass),
       },
     },
@@ -323,7 +336,7 @@ async function deleteBucket(input: Record<string, unknown>, context: CloudflareR
     {
       method: "DELETE",
       path: `/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}`,
-      headers: buildJurisdictionHeaders(input),
+      headers: buildR2JurisdictionHeaders(input),
     },
     "execute",
   );
@@ -340,7 +353,7 @@ async function getBucketCorsPolicy(input: Record<string, unknown>, context: Clou
     context,
     {
       path: `/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}/cors`,
-      headers: buildJurisdictionHeaders(input),
+      headers: buildR2JurisdictionHeaders(input),
     },
     "execute",
   );
@@ -361,7 +374,7 @@ async function updateBucketCorsPolicy(input: Record<string, unknown>, context: C
       body: {
         rules: normalizeCorsRuleRequestList(input.rules),
       },
-      headers: buildJurisdictionHeaders(input),
+      headers: buildR2JurisdictionHeaders(input),
     },
     "execute",
   );
@@ -379,7 +392,7 @@ async function deleteBucketCorsPolicy(input: Record<string, unknown>, context: C
     {
       method: "DELETE",
       path: `/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}/cors`,
-      headers: buildJurisdictionHeaders(input),
+      headers: buildR2JurisdictionHeaders(input),
     },
     "execute",
   );
@@ -409,12 +422,12 @@ async function putObject(input: Record<string, unknown>, context: CloudflareR2Co
       ? base64Bytes(input.contentBase64, "contentBase64", providerInputError)
       : Buffer.from(String(input.contentText ?? ""), "utf8");
   const headers: Record<string, string | undefined> = {
-    ...buildJurisdictionHeaders(input),
+    ...buildR2JurisdictionHeaders(input),
     "content-type": resolvedContentType,
   };
   const response = await context.fetcher(
     buildCloudflareR2Url(
-      `/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}/objects/${encodeR2ObjectKey(objectKey)}`,
+      `/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}/objects/${encodeR2ObjectKeyPath(objectKey)}`,
     ),
     {
       method: "PUT",
@@ -537,6 +550,13 @@ async function resolveR2S3AccessKeyId(accountId: string, context: CloudflareR2Co
   return verification.tokenId;
 }
 
+export function resolveCloudflareR2AccessKeyId(
+  input: Record<string, unknown>,
+  context: CloudflareR2Context,
+): Promise<string> {
+  return resolveR2S3AccessKeyId(resolveAccountId(input, context), context);
+}
+
 interface CloudflareR2TokenVerification {
   tokenId?: string;
   tokenStatus?: string;
@@ -626,7 +646,7 @@ function readObjectKey(input: Record<string, unknown>): string {
   return objectKey;
 }
 
-function resolveAccountId(input: Record<string, unknown>, context: CloudflareR2Context): string {
+export function resolveAccountId(input: Record<string, unknown>, context: CloudflareR2Context): string {
   const inputAccountId = optionalString(input.accountId);
   const accountId = context.accountId ?? optionalString(context.metadata.accountId) ?? inputAccountId;
   if (!accountId) {
@@ -660,13 +680,13 @@ function ensureAccountIsAvailable(accountId: string, metadata: Record<string, un
   }
 }
 
-function buildJurisdictionHeaders(input: Record<string, unknown>): Record<string, string | undefined> {
+export function buildR2JurisdictionHeaders(input: Record<string, unknown>): Record<string, string | undefined> {
   return {
     "cf-r2-jurisdiction": optionalString(input.jurisdiction),
   };
 }
 
-function encodeR2ObjectKey(objectKey: string): string {
+export function encodeR2ObjectKeyPath(objectKey: string): string {
   return objectKey.split("/").map(encodeR2ObjectKeySegment).join("/");
 }
 
@@ -688,7 +708,7 @@ async function requestEnvelope(
   return cloudflareR2RequestEnvelope(context.accessToken, request, context, phase);
 }
 
-async function cloudflareR2RequestEnvelope(
+export async function cloudflareR2RequestEnvelope(
   apiToken: string,
   request: CloudflareR2RequestInput,
   context: { fetcher: typeof fetch; signal?: AbortSignal },
@@ -865,7 +885,7 @@ function normalizeCorsRuleRequest(value: unknown): Record<string, unknown> {
   });
 }
 
-function readObject(value: unknown, label: string): Record<string, unknown> {
+export function readObject(value: unknown, label: string): Record<string, unknown> {
   const record = optionalRecord(value);
   if (!record) {
     throw new ProviderRequestError(502, `malformed ${label} response`);
@@ -873,7 +893,7 @@ function readObject(value: unknown, label: string): Record<string, unknown> {
   return record;
 }
 
-function readRequiredString(record: Record<string, unknown>, field: string): string {
+export function readRequiredString(record: Record<string, unknown>, field: string): string {
   const value = optionalString(record[field]);
   if (!value) {
     throw new ProviderRequestError(502, `malformed cloudflare r2 response: missing ${field}`);
@@ -889,9 +909,32 @@ function readRequiredStringArray(record: Record<string, unknown>, field: string)
   return value.map((item) => String(item));
 }
 
-function readOptionalStringArray(value: unknown): string[] | undefined {
+export function readOptionalStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
   return value.map((item) => optionalString(item)).filter((item): item is string => typeof item === "string");
+}
+
+export function buildCloudflareR2BucketPath(input: Record<string, unknown>, context: CloudflareR2Context): string {
+  const accountId = resolveAccountId(input, context);
+  const bucketName = requiredString(input.bucketName, "bucketName", providerInputError);
+  return `/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}`;
+}
+
+export function readObjectArray(value: unknown, label: string): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) throw new ProviderRequestError(502, `malformed ${label} response`);
+  return value.map((item) => readObject(item, label));
+}
+
+export function readRequiredBoolean(record: Record<string, unknown>, field: string): boolean {
+  const value = record[field];
+  if (typeof value !== "boolean") {
+    throw new ProviderRequestError(502, `malformed cloudflare r2 response: missing ${field}`);
+  }
+  return value;
+}
+
+export function requireObjectKey(value: unknown): string {
+  return readObjectKey({ objectKey: value });
 }
