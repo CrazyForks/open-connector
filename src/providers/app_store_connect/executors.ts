@@ -17,7 +17,7 @@ import {
 import { createAppStoreConnectAuthorization } from "./jwt.ts";
 import {
   appStoreConnectActionHandlers,
-  appStoreConnectApiBaseUrl,
+  appStoreConnectApiOrigin,
   requestAppStoreConnectCredentialValidation,
 } from "./runtime.ts";
 
@@ -60,7 +60,7 @@ export const credentialValidators: CredentialValidators = {
       // holds, so there is nothing to derive granted scopes from.
       grantedScopes: [],
       metadata: {
-        apiBaseUrl: appStoreConnectApiBaseUrl,
+        apiBaseUrl: appStoreConnectApiOrigin,
         validationEndpoint: "/v1/apps",
         keyId,
         issuerId: issuerId ?? null,
@@ -72,7 +72,7 @@ export const credentialValidators: CredentialValidators = {
 
 export const proxy: ProviderProxyExecutor = defineProviderProxy({
   service,
-  baseUrl: appStoreConnectApiBaseUrl,
+  baseUrl: appStoreConnectApiOrigin,
   // App Store Connect authenticates with a per-request signed JWT, which no
   // shared proxy auth type covers, so the header is set here instead.
   auth: { type: "none" },
