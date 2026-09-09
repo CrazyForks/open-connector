@@ -258,7 +258,7 @@ export const oauth: ProviderOAuthRuntime = {
     const message = optionalString(payload?.message);
     if (!response.ok) {
       if (message === "Invalid refresh token") {
-        throw new ProviderRequestError(401, message, payload, "credential_expired");
+        throw new ProviderRequestError(401, message, payload);
       }
       throw input.createError(message ?? `Miro token refresh failed (HTTP ${response.status}).`);
     }

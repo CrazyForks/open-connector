@@ -309,12 +309,7 @@ export function mapPaperlessError(
   }
   if (status === 401) {
     return credentialInvalidDetails.has(message)
-      ? new ProviderRequestError(
-          401,
-          `Paperless-ngx rejected the API token: ${message}`,
-          undefined,
-          "credential_expired",
-        )
+      ? new ProviderRequestError(401, `Paperless-ngx rejected the API token: ${message}`)
       : new ProviderRequestError(401, message, undefined, "provider_error");
   }
   if (status === 403) return new ProviderRequestError(403, message, undefined, "provider_error");
@@ -496,12 +491,7 @@ export async function validatePaperlessCredential(
 
 export function requirePaperlessFileTransit(context: Pick<PaperlessExecutionContext, "transitFiles">): void {
   if (!context.transitFiles) {
-    throw new ProviderRequestError(
-      500,
-      "Paperless-ngx transit file storage is not configured",
-      undefined,
-      "provider_not_configured",
-    );
+    throw new ProviderRequestError(500, "Paperless-ngx transit file storage is not configured");
   }
 }
 
@@ -512,12 +502,7 @@ export async function transitPaperlessResponse(
   const body = input.response.body;
   if (!connection.transitFiles) {
     await body?.cancel().catch(() => undefined);
-    throw new ProviderRequestError(
-      500,
-      "Paperless-ngx transit file storage is not configured",
-      undefined,
-      "provider_not_configured",
-    );
+    throw new ProviderRequestError(500, "Paperless-ngx transit file storage is not configured");
   }
   if (!body) {
     throw new ProviderRequestError(502, "Paperless-ngx returned an empty file response", undefined, "provider_error");

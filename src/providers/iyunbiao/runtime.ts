@@ -162,12 +162,7 @@ export async function executeIyunbiaoAction(
   const detailTable =
     input.detailTableName === undefined ? undefined : segment(input.detailTableName, "detailTableName");
   if ((name === "download_attachment" || name === "download_cloud_file") && !options.transitFiles) {
-    throw new ProviderRequestError(
-      500,
-      "Yunbiao attachment download requires file transit and execution context",
-      undefined,
-      "provider_not_configured",
-    );
+    throw new ProviderRequestError(500, "Yunbiao attachment download requires file transit and execution context");
   }
   const cloudId = name === "download_cloud_file" ? segment(String(input.fileId), "fileId") : undefined;
   if (name === "save_user") {

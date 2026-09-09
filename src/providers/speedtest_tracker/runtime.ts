@@ -285,10 +285,10 @@ function createSpeedtestTrackerError(status: number, payload: unknown, phase: Re
     return providerInputError(message);
   }
   if (status === 401 && message.startsWith(unauthenticatedPrefix)) {
-    return new ProviderRequestError(401, message, undefined, "credential_expired");
+    return new ProviderRequestError(401, message);
   }
   if (status === 403 && isPermissionDenied(payload)) {
-    return new ProviderRequestError(403, message, undefined, "scope_missing");
+    return new ProviderRequestError(403, message);
   }
   if (status === 422) {
     return providerInputError(formatValidationMessage(message, record));
