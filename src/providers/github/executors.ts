@@ -33,6 +33,7 @@ export const executors: ProviderExecutors = defineProviderExecutors<GitHubAction
     return {
       accessToken: credential.accessToken,
       fetcher,
+      transitFiles: context.transitFiles,
       signal: context.signal,
     };
   },

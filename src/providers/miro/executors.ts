@@ -4,6 +4,7 @@ import type {
   ProviderExecutors,
   ProviderProxyExecutor,
 } from "../../core/types.ts";
+import type { ProviderOAuthRuntime } from "../../oauth/oauth-token.ts";
 import type { ProviderActionHandlers } from "../provider-runtime.ts";
 import type { OAuthProviderContext, ProviderRuntimeHandler } from "../provider-runtime.ts";
 
@@ -11,6 +12,7 @@ import {
   compactObject,
   objectArray,
   optionalInteger,
+  optionalNumber,
   optionalRecord,
   optionalString,
   optionalStringArray,
@@ -46,7 +48,7 @@ interface MiroRequestOptions {
   path: string;
   phase: MiroRequestPhase;
   signal?: AbortSignal;
-  method?: "GET" | "POST";
+  method?: "DELETE" | "GET" | "PATCH" | "POST";
   query?: Record<string, string>;
   body?: Record<string, unknown>;
 }
@@ -152,11 +154,69 @@ export const miroActionHandlers: ProviderActionHandlers<"miro", MiroActionHandle
       ),
     };
   },
+  async delete_item(input: Record<string, unknown>, context: OAuthProviderContext): Promise<unknown> {
+    const boardId = requiredInputString(input.boardId, "boardId");
+    const itemId = requiredInputString(input.itemId, "itemId");
+    await requestMiroJson({
+      ...context,
+      method: "DELETE",
+      path: `/v2/boards/${encodeURIComponent(boardId)}/items/${encodeURIComponent(itemId)}`,
+      phase: "execute",
+    });
+    return { boardId, itemId, deleted: true };
+  },
   async create_sticky_note(input, context): Promise<unknown> {
     return createBoardItem(input, context, "sticky_notes", "sticky note");
   },
   async create_text(input, context): Promise<unknown> {
     return createBoardItem(input, context, "texts", "text item");
+  },
+  async create_shape(input: Record<string, unknown>, context: OAuthProviderContext): Promise<unknown> {
+    return createBoardItem(input, context, "shapes", "shape");
+  },
+  async update_sticky_note(input: Record<string, unknown>, context: OAuthProviderContext): Promise<unknown> {
+    return updateStickyNote(input, context);
+  },
+  async create_connector(input: Record<string, unknown>, context: OAuthProviderContext): Promise<unknown> {
+    const boardId = requiredInputString(input.boardId, "boardId");
+    const startItem = requiredRecord(input.startItem, "startItem", providerInputError);
+    const endItem = requiredRecord(input.endItem, "endItem", providerInputError);
+    validateConnectorEndpoint(startItem, "startItem");
+    validateConnectorEndpoint(endItem, "endItem");
+    if (
+      requiredString(startItem.id, "startItem.id", providerInputError) ===
+      requiredString(endItem.id, "endItem.id", providerInputError)
+    ) {
+      throw new ProviderRequestError(400, "startItem.id and endItem.id must identify different items");
+    }
+    const connector = requireMiroObject(
+      await requestMiroJson({
+        ...context,
+        method: "POST",
+        path: `/v2/boards/${encodeURIComponent(boardId)}/connectors`,
+        phase: "execute",
+        body: compactObject({
+          startItem,
+          endItem,
+          shape: optionalString(input.shape),
+          captions: Array.isArray(input.captions) ? input.captions : undefined,
+          style: optionalRecord(input.style),
+        }),
+      }),
+      "create connector response",
+    );
+    return { connector };
+  },
+  async delete_connector(input: Record<string, unknown>, context: OAuthProviderContext): Promise<unknown> {
+    const boardId = requiredInputString(input.boardId, "boardId");
+    const connectorId = requiredInputString(input.connectorId, "connectorId");
+    await requestMiroJson({
+      ...context,
+      method: "DELETE",
+      path: `/v2/boards/${encodeURIComponent(boardId)}/connectors/${encodeURIComponent(connectorId)}`,
+      phase: "execute",
+    });
+    return { boardId, connectorId, deleted: true };
   },
 };
 
@@ -170,6 +230,49 @@ export const proxy: ProviderProxyExecutor = defineProviderProxy({
   auth: { type: "oauth_bearer" },
   skipDnsValidation: true,
 });
+
+export const oauth: ProviderOAuthRuntime = {
+  async refreshAccessToken(input) {
+    const body = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: input.refreshToken,
+      client_id: input.clientConfig.clientId,
+      client_secret: input.clientConfig.clientSecret,
+    });
+    const response = await input.fetcher("https://api.miro.com/v1/oauth/token", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": providerUserAgent,
+      },
+      body,
+      redirect: "manual",
+    });
+    const payload = optionalRecord(
+      await readProviderJsonBody(response, {
+        emptyBody: null,
+        invalidJsonMessage: "Miro token refresh returned invalid JSON",
+      }),
+    );
+    const message = optionalString(payload?.message);
+    if (!response.ok) {
+      if (message === "Invalid refresh token") {
+        throw new ProviderRequestError(401, message, payload, "credential_expired");
+      }
+      throw input.createError(message ?? `Miro token refresh failed (HTTP ${response.status}).`);
+    }
+    const accessToken = requiredString(payload?.access_token, "access_token", input.createError);
+    const expiresIn = optionalNumber(payload?.expires_in);
+    return {
+      accessToken,
+      refreshToken: optionalString(payload?.refresh_token),
+      tokenType: optionalString(payload?.token_type) ?? "Bearer",
+      expiresAt: expiresIn === undefined ? undefined : new Date(Date.now() + expiresIn * 1000).toISOString(),
+      metadata: compactObject({ expires_in: expiresIn, scope: optionalString(payload?.scope) }),
+    };
+  },
+};
 
 export const credentialValidators: CredentialValidators = {
   async oauth2(input, { fetcher, signal }) {
@@ -191,12 +294,13 @@ export const credentialValidators: CredentialValidators = {
 async function createBoardItem(
   input: Record<string, unknown>,
   context: OAuthProviderContext,
-  endpoint: "sticky_notes" | "texts",
+  endpoint: "shapes" | "sticky_notes" | "texts",
   resourceName: string,
 ): Promise<{ item: Record<string, unknown> }> {
   const boardId = requiredInputString(input.boardId, "boardId");
-  const data = requiredRecord(input.data, "data", providerInputError);
-  requiredString(data.content, "data.content", providerInputError);
+  const data =
+    endpoint === "shapes" ? optionalRecord(input.data) : requiredRecord(input.data, "data", providerInputError);
+  if (endpoint !== "shapes") requiredString(data?.content, "data.content", providerInputError);
   const geometry = optionalRecord(input.geometry);
   if (endpoint === "sticky_notes" && geometry?.width !== undefined && geometry.height !== undefined) {
     throw new ProviderRequestError(400, "geometry must specify either width or height, not both");
@@ -222,6 +326,39 @@ async function createBoardItem(
     `create ${resourceName} response`,
   );
   return { item };
+}
+
+async function updateStickyNote(input: Record<string, unknown>, context: OAuthProviderContext): Promise<unknown> {
+  const data = optionalRecord(input.data);
+  const style = optionalRecord(input.style);
+  const position = optionalRecord(input.position);
+  const geometry = optionalRecord(input.geometry);
+  const parent = optionalRecord(input.parent);
+  if (!data && !style && !position && !geometry && !parent) {
+    throw new ProviderRequestError(400, "at least one sticky note field is required");
+  }
+  if (geometry?.width !== undefined && geometry.height !== undefined) {
+    throw new ProviderRequestError(400, "geometry must specify either width or height, not both");
+  }
+  const boardId = requiredInputString(input.boardId, "boardId");
+  const itemId = requiredInputString(input.itemId, "itemId");
+  const item = requireMiroObject(
+    await requestMiroJson({
+      ...context,
+      method: "PATCH",
+      path: `/v2/boards/${encodeURIComponent(boardId)}/sticky_notes/${encodeURIComponent(itemId)}`,
+      phase: "execute",
+      body: compactObject({ data, style, position, geometry, parent }),
+    }),
+    "update sticky note response",
+  );
+  return { item };
+}
+
+function validateConnectorEndpoint(endpoint: Record<string, unknown>, label: string): void {
+  if (endpoint.position !== undefined && endpoint.snapTo !== undefined) {
+    throw new ProviderRequestError(400, `${label} must specify either position or snapTo, not both`);
+  }
 }
 
 async function requestMiroJson(input: MiroRequestOptions): Promise<unknown> {

@@ -565,8 +565,63 @@ function normalizeProductHistory(
           },
         ];
       }),
+    monthlySoldHistory: normalizeValueHistory(product.monthlySoldHistory),
+    couponHistory: normalizeCouponHistory(product.couponHistory),
+    salesRankHistory: normalizeSalesRankHistory(product.salesRanks),
     raw: product,
   };
+}
+
+function normalizeValueHistory(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return normalizeHistoryPoints(value, false).map((point) => ({
+    keepaTime: point.keepaTime,
+    timestamp: point.timestamp,
+    value: point.value,
+  }));
+}
+
+function normalizeCouponHistory(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const points: Array<{
+    keepaTime: number;
+    timestamp: string;
+    oneTimeCoupon: number;
+    subscribeAndSaveCoupon: number;
+  }> = [];
+  for (let index = 0; index + 2 < value.length; index += 3) {
+    const keepaTime = value[index];
+    const oneTimeCoupon = value[index + 1];
+    const subscribeAndSaveCoupon = value[index + 2];
+    if (
+      !isValidKeepaTime(keepaTime) ||
+      typeof oneTimeCoupon !== "number" ||
+      !Number.isInteger(oneTimeCoupon) ||
+      typeof subscribeAndSaveCoupon !== "number" ||
+      !Number.isInteger(subscribeAndSaveCoupon)
+    ) {
+      continue;
+    }
+    points.push({
+      keepaTime,
+      timestamp: keepaTimeToIso(keepaTime),
+      oneTimeCoupon,
+      subscribeAndSaveCoupon,
+    });
+  }
+  return points;
+}
+
+function normalizeSalesRankHistory(value: unknown) {
+  const salesRanks = optionalRecord(value);
+  if (!salesRanks) return [];
+  return Object.entries(salesRanks)
+    .flatMap(([categoryId, history]) => {
+      const numericCategoryId = Number(categoryId);
+      if (!Number.isInteger(numericCategoryId) || numericCategoryId < 0) return [];
+      return [{ categoryId: numericCategoryId, points: normalizeValueHistory(history) }];
+    })
+    .sort((left, right) => left.categoryId - right.categoryId);
 }
 
 function normalizeHistoryPoints(
@@ -590,8 +645,7 @@ function normalizeHistoryPoints(
     const historyValue = value[index + 1];
     const shipping = includesShipping ? value[index + 2] : null;
     if (
-      typeof keepaTime !== "number" ||
-      !Number.isInteger(keepaTime) ||
+      !isValidKeepaTime(keepaTime) ||
       typeof historyValue !== "number" ||
       !Number.isInteger(historyValue) ||
       (shipping !== null && (typeof shipping !== "number" || !Number.isInteger(shipping)))
@@ -640,6 +694,12 @@ function normalizeSeller(sellerId: string, raw: Record<string, unknown>): Record
 
 function keepaTimeToIso(keepaTime: number): string {
   return new Date((keepaTime + keepaTimeStartMinutes) * 60_000).toISOString();
+}
+
+function isValidKeepaTime(value: unknown): value is number {
+  if (typeof value !== "number" || !Number.isInteger(value)) return false;
+  const unixMilliseconds = (value + keepaTimeStartMinutes) * 60_000;
+  return Number.isFinite(unixMilliseconds) && Math.abs(unixMilliseconds) <= 8_640_000_000_000_000;
 }
 
 function requireMarketplace(value: unknown): KeepaMarketplace {

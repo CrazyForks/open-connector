@@ -152,10 +152,10 @@ function errorEnvelope(result: ToolResult): { code: string; message?: string } |
 function mapError(error: unknown): ProviderRequestError {
   if (error instanceof ProviderRequestError) return error;
   if (error instanceof UnauthorizedError)
-    return new ProviderRequestError(401, "SellerSprite MCP Secret Key is invalid, expired, or inactive", error);
+    return new ProviderRequestError(401, "SellerSprite MCP request was unauthorized", error);
   if (error instanceof SdkHttpError)
     return new ProviderRequestError(
-      error.status === 401 || error.status === 403 ? 401 : error.status === 429 ? 429 : 502,
+      error.status === 401 || error.status === 403 || error.status === 429 ? error.status : 502,
       `SellerSprite MCP request failed: ${error.message}`,
       error,
     );

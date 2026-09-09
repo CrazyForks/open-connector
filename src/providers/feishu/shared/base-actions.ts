@@ -36,11 +36,66 @@ const paginationFields = {
   limit: s.positiveInteger("The maximum number of results to return.", { maximum: 200 }),
 };
 const rawObjectSchema = s.looseObject("The raw Base object returned by Feishu.");
-const fieldDefinitionSchema = s.looseObject("A Base field definition using the official field JSON shape.", {
-  name: s.string("The field name."),
-  type: s.string("The field type such as `text`, `number`, or `select`."),
-  property: s.looseObject("The type-specific field configuration."),
-});
+const fieldDefinitionSchema = s.looseRequiredObject(
+  "A Base v3 field definition. Put type-specific configuration at the top level, not in property. Use select with multiple for single/multiple choice, and datetime for dates. Advanced types accept their official top-level fields: link_table for link, expression for formula, from/select/where for lookup, and button_config for button.",
+  {
+    name: s.nonEmptyString("The field name."),
+    type: s.stringEnum("The Base v3 field type. Single and multiple choice both use select.", [
+      "text",
+      "number",
+      "select",
+      "datetime",
+      "created_at",
+      "updated_at",
+      "user",
+      "group_chat",
+      "created_by",
+      "updated_by",
+      "link",
+      "formula",
+      "lookup",
+      "auto_number",
+      "attachment",
+      "location",
+      "checkbox",
+      "button",
+    ]),
+    description: s.string("The field description, in plain text or Markdown."),
+    style: s.looseObject('The type-specific display style, such as { "type": "plain", "precision": 2 } for a number.'),
+    multiple: s.boolean("Whether select, user, or group_chat accepts multiple values."),
+    options: s.array(
+      "Static select options. Use options or dynamic_options_source, not both.",
+      s.object("A select option identified by its name.", {
+        name: s.nonEmptyString("The option name."),
+        hue: s.string("The option color hue, such as Blue or Green."),
+        lightness: s.string("The option color lightness, such as Light or Standard."),
+      }),
+    ),
+    dynamic_options_source: s.object("The source field for dynamic select options, available when creating a field.", {
+      table_id: s.nonEmptyString("The source table ID or name."),
+      field_id: s.nonEmptyString("The source field ID or name."),
+    }),
+    default_value: s.unknown(
+      "The default cell value for text, number, static select, datetime, or user. Select defaults are option-name arrays, even for single choice. Use null to clear the default.",
+    ),
+  },
+  {
+    optional: ["description", "style", "multiple", "options", "dynamic_options_source", "default_value"],
+  },
+);
+fieldDefinitionSchema.propertyNames = { not: { enum: ["property", "field_name", "ui_type"] } };
+const updateFieldProperties = Object.fromEntries(
+  Object.entries(fieldDefinitionSchema.properties ?? {}).filter(([name]) => name !== "dynamic_options_source"),
+) as Record<string, JsonSchema>;
+updateFieldProperties.options = {
+  ...updateFieldProperties.options,
+  description: "The static select options.",
+};
+const updateFieldDefinitionSchema: JsonSchema = {
+  ...fieldDefinitionSchema,
+  properties: updateFieldProperties,
+  not: { required: ["dynamic_options_source"] },
+};
 const viewDefinitionSchema = s.looseRequiredObject(
   "A Base view definition using the official view JSON shape.",
   {
@@ -485,7 +540,8 @@ export function createFeishuBaseActions(service: string): readonly ActionDefinit
     }),
     defineProviderAction(service, {
       name: "update_base_field",
-      description: "Update one field in a Feishu Base table.",
+      description:
+        "Replace one field definition in a Feishu Base table. Read the field first and include all writable configuration to preserve; this is a full PUT replacement, not a partial update.",
       requiredScopes: [feishuBaseProviderPermissions.fieldUpdate],
       providerPermissions: [feishuBaseProviderPermissions.fieldUpdate],
       inputSchema: s.object(
@@ -494,7 +550,7 @@ export function createFeishuBaseActions(service: string): readonly ActionDefinit
           appToken: appTokenField,
           tableId: tableIdField,
           fieldId: fieldIdField,
-          field: fieldDefinitionSchema,
+          field: updateFieldDefinitionSchema,
         },
         {
           optional: [],

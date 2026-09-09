@@ -167,8 +167,14 @@ const actions: OutlookActionSource[] = [
     input({
       mailFolderId,
       top: s.integer({ minimum: 1, maximum: 1000, description: "Maximum number of messages to return." }),
-      filter: s.string({ description: "OData filter expression for the messages query." }),
-      orderby: s.string({ description: "OData orderby expression for the messages query." }),
+      filter: s.string({
+        description:
+          "OData filter expression for the messages query. When combined with orderby, include every orderby property first, in the same order. Example: receivedDateTime ge 2026-01-01T00:00:00Z and isRead eq false.",
+      }),
+      orderby: s.string({
+        description:
+          "OData orderby expression for the messages query. When combined with filter, every ordered property must appear first in the filter and in the same order. Example: receivedDateTime desc.",
+      }),
       select: stringArray("Message fields to request from Microsoft Graph."),
       nextLink,
       bodyContentType,

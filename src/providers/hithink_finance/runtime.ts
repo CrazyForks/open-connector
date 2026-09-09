@@ -721,7 +721,11 @@ function buildProviderError(
     );
   }
   if (code === 4001 || status === 429) {
-    return hithinkError("rate_limited", detail, 429);
+    return hithinkError(
+      "rate_limited",
+      `${detail}. Reduce request frequency and concurrency, then retry with exponential backoff (up to 3 attempts)`,
+      429,
+    );
   }
   if (code === 4040) {
     return hithinkError(

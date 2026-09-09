@@ -2563,6 +2563,18 @@ export const githubActions: ActionDefinition[] = [
     }),
   }),
   action({
+    name: "download_workflow_artifact",
+    description: "Download a GitHub Actions workflow artifact ZIP into local transit-file storage.",
+    requiredScopes: githubRepoScopes,
+    inputSchema: s.object({
+      owner: nonEmptyString,
+      repo: nonEmptyString,
+      artifactId: s.integer({ minimum: 1 }),
+      fileName: s.string("Optional ZIP filename override."),
+    }),
+    outputSchema: s.object({ file: s.unknown("The stored local transit file.") }),
+  }),
+  action({
     name: "update_release",
     description: "Update a GitHub release by numeric id.",
     requiredScopes: githubRepoScopes,

@@ -5319,10 +5319,6 @@ const actionSources: GoogledriveActionSource[] = [
           type: "boolean",
           description: "Whether the user has starred the file.",
         },
-        trashed: {
-          type: "boolean",
-          description: "Whether to move the file to the trash.",
-        },
         appProperties: {
           type: "object",
           propertyNames: {

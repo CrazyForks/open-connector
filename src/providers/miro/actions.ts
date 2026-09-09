@@ -8,6 +8,7 @@ const service = "miro";
 
 const boardIdSchema = s.nonEmptyString("Unique identifier of the Miro board.");
 const itemIdSchema = s.nonEmptyString("Unique identifier of the Miro board item.");
+const connectorIdSchema = s.nonEmptyString("Unique identifier of the Miro connector.");
 const looseRecordSchema = s.unknownObject("Additional provider fields returned by Miro.");
 const miroItemTypes = [
   "text",
@@ -84,6 +85,22 @@ const stickyNoteDataSchema = s.looseRequiredObject(
   },
   { optional: ["shape"] },
 );
+const stickyNoteUpdateDataSchema = s.looseRequiredObject(
+  "Updated Miro sticky note data.",
+  {
+    content: s.string("Updated text or supported HTML displayed by the sticky note.", { maxLength: 6000 }),
+    shape: s.stringEnum("Updated sticky note shape.", ["square", "rectangle"]),
+  },
+  { optional: ["content", "shape"] },
+);
+const shapeDataSchema = s.looseRequiredObject(
+  "Miro shape data.",
+  {
+    content: s.string("Text or supported HTML displayed inside the shape.", { maxLength: 6000 }),
+    shape: s.nonEmptyString("Miro shape type, such as rectangle, circle, or triangle."),
+  },
+  { optional: ["content", "shape"] },
+);
 
 const itemStyleSchema = s.looseObject("Provider-native Miro item style fields.", {
   color: s.string("Text color."),
@@ -106,6 +123,14 @@ const stickyNoteGeometrySchema = s.looseObject("Geometry of the Miro sticky note
   height: s.number("Item height.", { exclusiveMinimum: 0 }),
   rotation: s.number("Clockwise item rotation in degrees."),
 });
+const stickyNoteUpdateGeometrySchema = s.object(
+  "Updated size of the Miro sticky note.",
+  {
+    width: s.number("Updated item width.", { exclusiveMinimum: 0 }),
+    height: s.number("Updated item height.", { exclusiveMinimum: 0 }),
+  },
+  { optional: ["width", "height"] },
+);
 
 const textGeometrySchema = s.object(
   "Geometry of the Miro text item. Miro calculates text height from its content and width.",
@@ -119,6 +144,31 @@ const textGeometrySchema = s.object(
 const itemParentSchema = s.looseObject("Optional parent frame for the item.", {
   id: s.nonEmptyString("Identifier of the parent frame."),
 });
+const connectorEndpointSchema = s.object(
+  "A Miro item attached to one end of the connector.",
+  {
+    id: itemIdSchema,
+    position: s.object(
+      "Relative attachment position on the item.",
+      {
+        x: s.number("Horizontal relative offset."),
+        y: s.number("Vertical relative offset."),
+      },
+      { optional: ["x", "y"] },
+    ),
+    snapTo: s.stringEnum("Side of the item where the connector snaps.", ["auto", "top", "right", "bottom", "left"]),
+  },
+  { optional: ["position", "snapTo"] },
+);
+const connectorCaptionSchema = s.object(
+  "A caption displayed on the connector.",
+  {
+    content: s.nonEmptyString("Caption text."),
+    position: s.string("Caption position along the connector, expressed as a percentage."),
+    textAlignVertical: s.stringEnum("Vertical alignment of the caption text.", ["top", "middle", "bottom"]),
+  },
+  { optional: ["position", "textAlignVertical"] },
+);
 
 export const miroActions: ActionDefinition[] = [
   defineProviderAction(service, {
@@ -203,6 +253,17 @@ export const miroActions: ActionDefinition[] = [
     outputSchema: s.object("The requested Miro board item.", { item: itemSchema }),
   }),
   defineProviderAction(service, {
+    name: "delete_item",
+    description: "Delete an item from a Miro board.",
+    requiredScopes: [miroBoardsWriteScope],
+    inputSchema: s.object("Miro board and item identifiers.", { boardId: boardIdSchema, itemId: itemIdSchema }),
+    outputSchema: s.object("Confirmation of the deleted Miro item.", {
+      boardId: boardIdSchema,
+      itemId: itemIdSchema,
+      deleted: s.literal(true, { description: "Whether the item was deleted." }),
+    }),
+  }),
+  defineProviderAction(service, {
     name: "create_sticky_note",
     description: "Create a sticky note on a Miro board with optional style, position, geometry, and parent frame.",
     requiredScopes: [miroBoardsWriteScope],
@@ -237,5 +298,74 @@ export const miroActions: ActionDefinition[] = [
       { optional: ["style", "position", "geometry", "parent"] },
     ),
     outputSchema: s.object("The created Miro text item.", { item: itemSchema }),
+  }),
+  defineProviderAction(service, {
+    name: "create_shape",
+    description: "Create a shape on a Miro board.",
+    requiredScopes: [miroBoardsWriteScope],
+    inputSchema: s.object(
+      "Properties for a new Miro shape.",
+      {
+        boardId: boardIdSchema,
+        data: shapeDataSchema,
+        style: itemStyleSchema,
+        position: itemPositionSchema,
+        geometry: stickyNoteGeometrySchema,
+        parent: itemParentSchema,
+      },
+      { optional: ["data", "style", "position", "geometry", "parent"] },
+    ),
+    outputSchema: s.object("The created Miro shape.", { item: itemSchema }),
+  }),
+  defineProviderAction(service, {
+    name: "update_sticky_note",
+    description: "Update a sticky note on a Miro board.",
+    requiredScopes: [miroBoardsWriteScope],
+    inputSchema: s.object(
+      "Miro sticky note identifier and fields to update.",
+      {
+        boardId: boardIdSchema,
+        itemId: itemIdSchema,
+        data: stickyNoteUpdateDataSchema,
+        style: itemStyleSchema,
+        position: itemPositionSchema,
+        geometry: stickyNoteUpdateGeometrySchema,
+        parent: itemParentSchema,
+      },
+      { optional: ["data", "style", "position", "geometry", "parent"] },
+    ),
+    outputSchema: s.object("The updated Miro sticky note.", { item: itemSchema }),
+  }),
+  defineProviderAction(service, {
+    name: "create_connector",
+    description: "Create a connector between two items on a Miro board.",
+    requiredScopes: [miroBoardsWriteScope],
+    inputSchema: s.object(
+      "Properties for a new Miro connector.",
+      {
+        boardId: boardIdSchema,
+        startItem: connectorEndpointSchema,
+        endItem: connectorEndpointSchema,
+        shape: s.stringEnum("Connector line shape.", ["straight", "elbowed", "curved"]),
+        captions: s.array("Captions displayed on the connector.", connectorCaptionSchema),
+        style: looseRecordSchema,
+      },
+      { optional: ["shape", "captions", "style"] },
+    ),
+    outputSchema: s.object("The created Miro connector.", { connector: looseRecordSchema }),
+  }),
+  defineProviderAction(service, {
+    name: "delete_connector",
+    description: "Delete a connector from a Miro board.",
+    requiredScopes: [miroBoardsWriteScope],
+    inputSchema: s.object("Miro board and connector identifiers.", {
+      boardId: boardIdSchema,
+      connectorId: connectorIdSchema,
+    }),
+    outputSchema: s.object("Confirmation of the deleted Miro connector.", {
+      boardId: boardIdSchema,
+      connectorId: connectorIdSchema,
+      deleted: s.literal(true, { description: "Whether the connector was deleted." }),
+    }),
   }),
 ];

@@ -237,7 +237,11 @@ export async function assertOutlookResponse(response: Response): Promise<void> {
   const { code, message } = await extractOutlookError(response);
 
   if (response.status === 400) {
-    throw new ProviderRequestError(400, message);
+    const invalidInputMessage =
+      code === "InefficientFilter"
+        ? `${message} When filter and orderby are combined, include every orderby property in filter, in the same order and before other filter properties.`
+        : message;
+    throw new ProviderRequestError(400, invalidInputMessage);
   }
   if (response.status === 401) {
     throw new ProviderRequestError(401, message);
