@@ -25,11 +25,10 @@ function readIyunbiaoCredentials(values: Record<string, string>): Credentials {
     fieldName: "instanceUrl",
     createError: providerInputError,
   });
-  if (url.protocol != "https:") throw providerInputError("instanceUrl must use HTTPS");
   if (url.pathname !== "/" || url.search || url.hash) {
     throw new ProviderRequestError(
       400,
-      "instanceUrl must be the HTTPS server origin; supply the application space ID separately",
+      "instanceUrl must be the HTTP or HTTPS server origin; supply the application space ID separately",
       undefined,
       "invalid_input",
     );

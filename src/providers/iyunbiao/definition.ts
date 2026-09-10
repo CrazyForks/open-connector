@@ -19,7 +19,7 @@ export const provider: ProviderDefinition = {
           required: true,
           secret: false,
           placeholder: "https://free.iyunbiao.cn",
-          description: "The HTTPS origin of your Yunbiao server, without the application space path.",
+          description: "The HTTP or HTTPS origin of your Yunbiao server, without the application space path.",
         },
         {
           key: "spaceId",

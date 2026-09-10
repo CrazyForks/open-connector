@@ -15,6 +15,24 @@ const extraFormatSchema = s.stringEnum("An additional export format requested fo
   "html",
   "latex",
 ]);
+const languageSchema = s.stringEnum("The document language pack used by pipeline and vlm models.", [
+  "ch",
+  "ch_server",
+  "en",
+  "japan",
+  "korean",
+  "chinese_cht",
+  "ta",
+  "te",
+  "ka",
+  "el",
+  "th",
+  "latin",
+  "arabic",
+  "cyrillic",
+  "east_slavic",
+  "devanagari",
+]);
 const dataIdSchema = s.string({
   minLength: 1,
   maxLength: 128,
@@ -55,7 +73,7 @@ const commonSingleExtractInputProperties: Record<string, JsonSchema> = {
   is_ocr: s.boolean("Whether to enable OCR. Only applies to pipeline and vlm models."),
   enable_formula: s.boolean("Whether to enable formula recognition for pipeline and vlm models."),
   enable_table: s.boolean("Whether to enable table recognition for pipeline and vlm models."),
-  language: s.nonEmptyString("The document language code used by pipeline and vlm models."),
+  language: languageSchema,
   data_id: dataIdSchema,
   extra_formats: s.array("Additional result formats to export besides Markdown and JSON.", extraFormatSchema, {
     minItems: 1,
@@ -135,7 +153,7 @@ export const mineruActions: ActionDefinition[] = [
         }),
         enable_formula: s.boolean("Whether to enable formula recognition for pipeline and vlm models."),
         enable_table: s.boolean("Whether to enable table recognition for pipeline and vlm models."),
-        language: s.nonEmptyString("The document language code used by pipeline and vlm models."),
+        language: languageSchema,
         extra_formats: s.array("Additional result formats to export besides Markdown and JSON.", extraFormatSchema, {
           minItems: 1,
         }),

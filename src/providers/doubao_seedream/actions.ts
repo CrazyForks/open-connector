@@ -11,7 +11,7 @@ const sizeSchema: JsonSchema = s.oneOf(
   [
     s.stringEnum("A standard output resolution.", ["2K", "3K", "4K"]),
     s.object(
-      "Custom output dimensions in pixels.",
+      "Custom output dimensions in pixels; width multiplied by height must be at least 3,686,400.",
       {
         width: s.integer("The output width in pixels.", { minimum: 1 }),
         height: s.integer("The output height in pixels.", { minimum: 1 }),

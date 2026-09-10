@@ -25,6 +25,7 @@ import { defaultSeedreamModel } from "./actions.ts";
 
 export const doubaoSeedreamApiBaseUrl = "https://ark.cn-beijing.volces.com/api/v3";
 const imagesPath = "images/generations";
+const minimumCustomImagePixels = 3_686_400;
 
 export const doubaoSeedreamActionHandlers: ProviderActionHandlers<
   "doubao_seedream",
@@ -67,6 +68,12 @@ function readSize(value: unknown): string {
   const height = optionalInteger(size.height);
   if (width === undefined || width <= 0 || height === undefined || height <= 0) {
     throw new ProviderRequestError(400, "size width and height must be positive integers");
+  }
+  if (width * height < minimumCustomImagePixels) {
+    throw new ProviderRequestError(
+      400,
+      `Custom image dimensions must contain at least ${minimumCustomImagePixels} pixels.`,
+    );
   }
   return `${width}x${height}`;
 }
