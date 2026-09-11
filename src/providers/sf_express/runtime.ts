@@ -25,7 +25,7 @@ import {
 
 export const sfExpressApiBaseUrl = "https://bspgw.sf-express.com/std/service";
 
-/** The sandbox gateway; every documented 沙箱环境 row names this host. */
+/** The sandbox gateway; every documented sandbox-environment row names this host. */
 const sfExpressSandboxBaseUrl = "https://sfapi-sbox.sf-express.com/std/service";
 
 /** Endpoints whose production URL differs from the default gateway, per their documented common-parameters sections. */
@@ -91,7 +91,7 @@ export type SfExpressSignatureAlgorithm = "standard_md5" | "simple_md5" | "sm3";
 export interface SfExpressActionContext {
   partnerId: string;
   checkWord: string;
-  /** Defaults to 标准MD5, the algorithm every application predating the choice signs with. */
+  /** Defaults to standard MD5, the algorithm used by every application created before the choice existed. */
   signatureAlgorithm?: SfExpressSignatureAlgorithm;
   /** Business client code assigned separately for the UFTL city-delivery APIs. */
   cityClientCode?: string;
@@ -139,7 +139,7 @@ function readSandboxFlag(value: unknown): boolean {
  * Read the optional signature-algorithm credential field, leaving it unset when
  * the connection does not name one so {@link signSfExpressPayload} owns the
  * default. An unrecognized value is rejected rather than falling back, because
- * the wrong algorithm fails every call with A1006 数字签名无效.
+ * the wrong algorithm fails every call with A1006 (invalid digital signature).
  */
 function readSignatureAlgorithm(value: unknown): SfExpressSignatureAlgorithm | undefined {
   const algorithm = optionalString(value)?.toLowerCase();
@@ -218,13 +218,13 @@ function javaFormUrlEncode(value: string): string {
  * three sign the same `msgData + timestamp + checkWord` string and differ only
  * in how they turn it into msgDigest:
  *
- * - `standard_md5` (标准MD5) runs it through `URLEncoder.encode(text, "UTF-8")`
+ * - `standard_md5` runs it through `URLEncoder.encode(text, "UTF-8")`
  *   first, then Base64(MD5(...)). Skipping that step fails verification for
  *   every payload, because JSON always carries characters the encoder rewrites.
- * - `simple_md5` (简易MD5) is the same Base64(MD5(...)) over the raw string.
- * - `sm3` (SM3) is the lowercase-hex 国密 SM3 digest of the raw string.
+ * - `simple_md5` is the same Base64(MD5(...)) over the raw string.
+ * - `sm3` is the lowercase hexadecimal SM3 digest of the raw string.
  *
- * 标准MD5 is the default, because it is what SF signed with before it offered
+ * Standard MD5 is the default because SF used it before offering
  * the choice and what every application created back then still uses.
  */
 export function signSfExpressPayload(

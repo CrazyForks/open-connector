@@ -36,7 +36,7 @@ export const sfExpressFreightCoreHandlers: ProviderActionHandlerSubset<"sf_expre
         "cargo_total_weight is required when addition_services includes the HIN (安装服务) service.",
       );
     }
-    // 包装服务 (PKFEE) and 安装服务 (HIN) carry their materiel / service-item detail JSON in value5.
+    // Packaging (PKFEE) and installation (HIN) services carry their material or service-item detail JSON in value5.
     const serviceMissingValue5 = additionServices?.find(
       (service) => (service.name === "PKFEE" || service.name === "HIN") && service.value5 === undefined,
     );

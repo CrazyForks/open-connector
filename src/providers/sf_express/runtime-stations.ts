@@ -457,12 +457,12 @@ export const sfExpressStationHandlers: ProviderActionHandlerSubset<"sf_express",
     const payload = await requestSfExpress(
       "COM_RECE_FC_SETTLE_VERIFY",
       {
-        // Only 订单类型 1 (派件投柜) is modelled; the rental and reservation types carry other data shapes.
+        // Only order type 1 (delivery to a locker) is modelled; the rental and reservation types carry other data shapes.
         type: 1,
         data: compactObject({
           opType,
           orderId: requiredInputString(input.order_id, "order_id"),
-          // The doc marks the rest 是1: they belong to the drop-off, not to giving it up.
+          // The documentation marks the other fields with "Yes 1": they belong to the drop-off, not its cancellation.
           cabinetCode: dropOff ? requiredInputString(input.cabinet_code, "cabinet_code") : undefined,
           empNo: dropOff ? requiredInputString(input.emp_no, "emp_no") : undefined,
           phone: dropOff ? requiredInputString(input.phone, "phone") : undefined,

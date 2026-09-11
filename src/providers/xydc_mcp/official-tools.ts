@@ -23,7 +23,7 @@ interface XydcMcpToolDefinition {
   followUpActions: ActionFollowUp[];
 }
 
-// 2026-09-10 官方认证 tools/list 的完整工具集；说明已翻译，字段保留上游 MCP 命名。
+// Complete tool set from the officially verified tools/list response on 2026-09-10.
 export const xydcMcpToolDefinitions: readonly XydcMcpToolDefinition[] = [
   {
     name: "generate_category_insight_resource",

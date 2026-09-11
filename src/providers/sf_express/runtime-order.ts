@@ -181,7 +181,7 @@ export const sfExpressOrderHandlers: ProviderActionHandlerSubset<"sf_express", S
         extraInfoList: readExtraInfoList(input.extra_info_list),
         serviceList: readServiceValueList(input.service_list, "service_list"),
         destContactInfo,
-        // The doc gates contact changes on the new-confirm mode; 1 is "支持修改联系人".
+        // The documentation gates contact changes on the new-confirm mode; 1 allows contact changes.
         isConfirmNew: destContactInfo === undefined ? undefined : 1,
         isDocall: optionalFlagNumber(input.is_docall),
         specialDeliveryTypeCode: optionalString(input.special_delivery_type_code),

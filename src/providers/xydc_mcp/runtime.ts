@@ -13,7 +13,7 @@ export function normalizeXydcMcpToolResult(result: McpToolResult): unknown {
     try {
       candidates.push(JSON.parse(item.text) as unknown);
     } catch {
-      // 普通文本由调用方按 MCP content 处理。
+      // The caller handles plain text as MCP content.
     }
   }
   for (const candidate of candidates) {

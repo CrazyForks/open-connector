@@ -341,7 +341,7 @@ export const sfExpressFreightForwardCrossborderHandlers: ProviderActionHandlerSu
     }
     const receiverAddress = readCrossborderContact(input.recipient, "recipient");
     if (receiverType === "2") {
-      // A 非FBA地址 destination is a street address, so SF requires the full delivery block.
+      // A non-FBA destination is a street address, so SF requires the full delivery block.
       for (const [field, key] of [
         ["address", "address"],
         ["contact", "contact"],

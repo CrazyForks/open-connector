@@ -758,7 +758,7 @@ async function normalizeDropboxHttpError(response: Response, fallbackMessage: st
     try {
       body = JSON.parse(responseText) as unknown;
     } catch {
-      // Dropbox 的错误体可能与 Content-Type 声明不一致，此时保留原文。
+      // Dropbox error bodies may not match their declared Content-Type, so preserve the raw text.
     }
   }
 

@@ -487,7 +487,7 @@ function validateTikTokProductInput(value: unknown): void {
     )
       return;
   } catch {
-    // 统一在下方返回输入错误。
+    // Return the input error below for both invalid cases.
   }
   throw new ProviderRequestError(400, "productInput must be a 19-digit product ID or supported TikTok product URL");
 }

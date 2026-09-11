@@ -4,7 +4,7 @@ import { s } from "../../core/json-schema.ts";
 import { defineProviderAction } from "../../core/provider-definition.ts";
 import { patsnapResultSchema } from "./schemas.ts";
 
-// 来源为官方 MCP 服务页面；未公布元素结构的 JSON 数组保留宽松项。
+// Sourced from the official MCP service page. JSON arrays with undocumented element shapes remain permissive.
 const landscapeQueryInput = s.requiredObject("Patsnap MCP tool arguments.", {
   collapse_order_authority: s.optional(
     s.array("Patent dedup sort rules | JSON array", s.unknown("One item in this list.")),

@@ -39,7 +39,7 @@ interface MapRegion {
   westLongitude: number;
 }
 
-/** 地理编码、搜索与自动补全共有的提示参数 */
+/** Hints shared by geocoding, search, and autocomplete. */
 interface SearchHintInput {
   lang?: string;
   limitToCountries?: string[];
@@ -105,7 +105,7 @@ interface GetEtasInput {
   arrivalDate?: string;
 }
 
-/** action 名到 (已经过 inputSchema 校验的) 输入形状 */
+/** Validated input shape for each action. */
 interface AppleMapsActionInputs {
   geocode_address: GeocodeAddressInput;
   reverse_geocode: ReverseGeocodeInput;
@@ -125,7 +125,7 @@ type AppleMapsHandlers = {
   ) => Promise<unknown>;
 };
 
-/** 值为 undefined 或空串的参数整个省略, 不发空参数 */
+/** Undefined and empty parameters are omitted. */
 type QueryParams = Record<string, string | undefined>;
 
 interface AppleMapsResponse {
@@ -177,7 +177,7 @@ const appleMapsActionHandlers: AppleMapsHandlers = {
   },
 
   async get_place(input, context) {
-    // "." 与 ".." 编码后原样不变, 拼进路径会被 URL 解析吃掉, 请求就落到别的端点上
+    // encodeURIComponent preserves dot segments, which would resolve to a different endpoint.
     if (input.placeId === "." || input.placeId === "..") {
       throw new ProviderRequestError(400, "placeId must be an Apple Maps Place ID");
     }
@@ -205,7 +205,7 @@ const appleMapsActionHandlers: AppleMapsHandlers = {
   },
 
   async get_directions(input, context) {
-    // arrivalDate 与 departureDate 互斥已经由 inputSchema 的 refine 在发请求前拦下
+    // Input validation rejects using arrivalDate and departureDate together.
     const payload = await requestAppleMaps(context, "/v1/directions", {
       origin: input.origin,
       destination: input.destination,
@@ -225,7 +225,7 @@ const appleMapsActionHandlers: AppleMapsHandlers = {
       destination: optionalRecord(body.destination) ?? null,
       routes: looseArray(body.routes),
       steps: looseArray(body.steps),
-      // Apple 总是返回全部折线, 体积可能很大; 只有调用方明确要时才透传
+      // Apple always returns every path, which may be large, so expose them only when requested.
       stepPaths: input.includeStepPaths === true ? looseArray(body.stepPaths) : null,
     };
   },
@@ -251,7 +251,7 @@ export async function executeAppleMapsAction(
     throw new ProviderRequestError(400, `unknown apple_maps action: ${actionName}`);
   }
   validateAppleMapsInput(actionName, input);
-  // input 已经过该 action 的 inputSchema 校验 (含默认值与 trim), 形状与 AppleMapsActionInputs 的对应条目一致
+  // The action schema has validated, defaulted, and trimmed this input.
   const handler = appleMapsActionHandlers[actionName as keyof AppleMapsActionInputs] as (
     input: unknown,
     context: AppleMapsRunContext,
@@ -275,11 +275,10 @@ function validateAppleMapsInput(actionName: string, input: Record<string, unknow
 }
 
 /**
- * 用 GET /v1/token 验证一把已配置的密钥。
+ * Validate a configured key with GET /v1/token.
  *
- * 换取成功就说明 Team ID、Key ID 与私钥匹配且密钥开通了 Maps 服务; 401 由共享映射报告成
- * 连接表单字段错误, 其余失败保留上游状态。Maps Server API 没有账号或团队信息端点, 所以身份只能取自
- * 用户填的 Team ID。
+ * A successful exchange proves that the Team ID, Key ID, and private key match and have Maps
+ * access. Maps Server API has no account endpoint, so the profile uses the supplied Team ID.
  */
 export async function validateAppleMapsCredential(
   values: Record<string, string>,
@@ -300,12 +299,10 @@ export async function validateAppleMapsCredential(
 }
 
 /**
- * 发一次业务 GET 请求, 返回 2xx 响应解析后的响应体。
+ * Send a business GET request and return its parsed successful response.
  *
- * 被 401 拒绝的 token 一律移出缓存, 避免下一次运行再拿它碰一次 401。取自缓存的 token 被拒绝时,
- * 重新取一次 token 重试且只重试一次: 淘汰之后如果并发运行已经换到了新 token 就直接用它,
- * 否则发起新的换取, 两种情况都不会再用被拒绝的那一个。本次运行刚换到的 token 被拒绝说明问题出在
- * 密钥本身, 直接报错不重试。
+ * Evict every token rejected with 401. Retry once when the rejected token came from cache; a fresh
+ * token rejected during the same execution indicates a credential problem and is not retried.
  */
 async function requestAppleMaps(context: AppleMapsRunContext, path: string, params: QueryParams): Promise<unknown> {
   const url = `${appleMapsApiOrigin}${path}${buildQueryString(params)}`;
@@ -352,9 +349,7 @@ async function sendAppleMapsRequest(
 }
 
 /**
- * 拼查询串。
- *
- * 用 encodeURIComponent 把空格编成 %20, 与 Apple 文档示例一致, 不用 URLSearchParams 那种 "+"。
+ * Build a query string with `%20` spaces, matching Apple's examples rather than URLSearchParams.
  */
 function buildQueryString(params: QueryParams): string {
   const pairs = Object.entries(params).flatMap(([name, value]) =>
@@ -385,7 +380,7 @@ function placeFilterParams(input: PlaceFilterInput): QueryParams {
   };
 }
 
-/** Apple 的列表参数是逗号分隔的字符串; 空列表整个省略 */
+/** Apple list parameters are comma-separated strings; empty lists are omitted. */
 function joinList(values: readonly string[] | undefined): string | undefined {
   return values && values.length > 0 ? values.join(",") : undefined;
 }
@@ -398,7 +393,7 @@ function formatOptionalCoordinate(coordinate: Coordinate | undefined): string | 
   return coordinate ? formatCoordinate(coordinate) : undefined;
 }
 
-/** SearchRegion 的顺序是 north-latitude, east-longitude, south-latitude, west-longitude */
+/** SearchRegion order is north, east, south, west. */
 function formatOptionalRegion(region: MapRegion | undefined): string | undefined {
   return region
     ? [region.northLatitude, region.eastLongitude, region.southLatitude, region.westLongitude]
@@ -408,11 +403,10 @@ function formatOptionalRegion(region: MapRegion | undefined): string | undefined
 }
 
 /**
- * 把坐标数值写成不带指数的十进制文本。
+ * Format a coordinate as decimal text without exponent notation.
  *
- * Number#toString 在绝对值小于 1e-6 时会输出 "1e-7" 这样的指数写法, Apple 的逗号坐标串不认它。
- * 这里把指数展开成普通小数, 保留 toString 给出的全部有效数字 (toFixed 会补出二进制误差位)。
- * 经纬度绝对值不超过 180, 不会出现正指数。
+ * Number#toString uses exponent notation below 1e-6, which Apple's coordinate strings reject.
+ * Expanding it preserves significant digits without the binary-error padding introduced by toFixed.
  */
 function formatDecimal(value: number): string {
   const text = String(value);
@@ -425,17 +419,16 @@ function formatDecimal(value: number): string {
   const mantissa = text.slice(negative ? 1 : 0, exponentIndex);
   const exponent = Number(text.slice(exponentIndex + "e-".length));
   const [integerDigits = "", fractionDigits = ""] = mantissa.split(".");
-  // 指数写法的整数部分只有一位; 小数点左移 exponent 位, 等于在有效数字前补 exponent - 1 个零
+  // Moving the decimal left by the exponent adds leading zeros before the significant digits.
   const leadingZeros = "0".repeat(exponent - integerDigits.length);
   return `${negative ? "-" : ""}0.${leadingZeros}${integerDigits}${fractionDigits}`;
 }
 
 /**
- * 把已通过 date-time 校验的时间写成 Apple 文档的 UTC 秒级写法, 例如 2023-04-15T16:42:00Z。
+ * Format a validated date-time as Apple's second-precision UTC representation.
  *
- * Apple 文档要求 UTC 时间; 带时区偏移的输入换算成同一时刻的 UTC, 小数秒舍去。date-time 格式还放行
- * "+08" 这种只写小时的偏移和闰秒 60, Date.parse 解析不了它们, 这时报 400, 不把 Apple 可能误读的原文发出去。
- * date-time 格式要求四位年份, 所以 toISOString 不会出现扩展年份, 截取前 19 位是安全的。
+ * Normalize offsets to UTC and discard fractional seconds. Reject schema-valid forms Date.parse
+ * cannot read, such as hour-only offsets and leap seconds, instead of sending ambiguous input.
  */
 function formatUtcDateTime(value: string | undefined, fieldName: string): string | undefined {
   if (value === undefined) {

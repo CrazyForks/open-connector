@@ -101,7 +101,7 @@ const tlOrderOutputSchema = s.requiredObject("The truckload order.", {
   signBackWaybillNo: s.nullableString("The sign-back receipt waybill number, when the sign-back service applies."),
 });
 
-/** The order's addressList table marks all eight members 必填=Y. */
+/** The order's addressList table marks all eight members as required. */
 const cityAddressSchema = s.requiredObject("One order address (发货/收货地址).", {
   coordinate: s.nonEmptyString("The longitude,latitude pair, for example 113.93041,22.53332."),
   contact: s.nonEmptyString("The contact name."),

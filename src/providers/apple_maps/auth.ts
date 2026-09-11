@@ -20,49 +20,49 @@ import {
 } from "./client.ts";
 
 /**
- * maps auth token 只用来换一次 access token。
- * 5 分钟足够覆盖一次换取请求, 万一泄漏, 可用窗口也很短。
+ * A Maps auth token is used for one access-token exchange only.
+ * Five minutes covers one exchange while keeping the exposure window short.
  */
 const authTokenLifetimeSeconds = 300;
-/** 在 Apple 给出的过期时间之前提前这么久换新, 避免请求发出时 token 恰好过期 */
+/** Refresh this long before Apple's expiry time to avoid using a token as it expires. */
 const accessTokenRefreshLeewayMs = 60_000;
-/** 进程内缓存最多保留的凭证条目数; 超出时淘汰最久未用的条目 */
+/** Maximum credential entries retained in process; the least recently used entry is evicted. */
 const maximumTokenCacheEntries = 256;
 const pkcs8Marker = "-----BEGIN PRIVATE KEY-----";
 
 export interface AppleMapsCredential {
   teamId: string;
   keyId: string;
-  /** 已把字面 \n 还原成真实换行的 PKCS#8 PEM 文本 */
+  /** PKCS#8 PEM text with literal `\n` sequences restored to newlines. */
   privateKey: string;
 }
 
 export interface AppleMapsAccessTokenLease {
   accessToken: string;
   /**
-   * true 表示 token 取自此前已经换好的缓存。
-   * 本次调用刚换到的 token, 以及加入别人在途换取得到的 token, 都是 false。
+   * True when the token came from a completed cached exchange.
+   * Tokens exchanged by this call or obtained by joining an in-flight exchange return false.
    */
   fromCache: boolean;
 }
 
 interface ExchangedAccessToken {
   accessToken: string;
-  /** 过了这个时刻就不再复用; undefined 表示 Apple 没给出可用的有效期, 只用于当前请求 */
+  /** Stop reusing the token after this time. Undefined means it is valid only for the current request. */
   refreshAt: number | undefined;
 }
 
 interface TokenCacheEntry {
   token?: { accessToken: string; refreshAt: number };
-  /** 同一凭证正在进行的换取; 并发的执行路径加入它而不是各自再换一次 */
+  /** An in-flight exchange shared by concurrent executions using the same credential. */
   pending?: Promise<ExchangedAccessToken>;
 }
 
 /**
- * 进程内的 access token 缓存, key 是凭证的 SHA-256。
+ * In-process access-token cache keyed by a SHA-256 digest of the credential.
  *
- * 换取本身是一次上游调用, 要占用团队每天 25,000 次的共享配额; auth token 则是本地签的,
- * 所以缓存的是换回来的 access token, 而不是 auth token。
+ * Each exchange consumes the team's shared daily quota of 25,000 upstream calls. Auth tokens are
+ * signed locally, so this caches exchanged access tokens instead.
  */
 const tokenCache = new Map<string, TokenCacheEntry>();
 
@@ -71,10 +71,10 @@ export function resetAppleMapsTokenCacheForTests(): void {
 }
 
 /**
- * 读取连接时保存的三个凭证字段。
+ * Read the three credential fields stored with the connection.
  *
- * 单行输入框和 JSON 调用方都可能把 PEM 里的换行写成字面 "\n", 先还原再检查 PEM 标记;
- * 缺少标记直接报 400, 错误消息里不回显任何私钥内容。
+ * Single-line inputs and JSON callers may encode PEM newlines as literal `\n` sequences. Restore
+ * them before checking the PEM marker, and never echo private-key content in the 400 response.
  */
 export function readAppleMapsCredential(values: Record<string, string | undefined>): AppleMapsCredential {
   const teamId = requiredInputString(values.teamId, "teamId");
@@ -91,10 +91,11 @@ export function readAppleMapsCredential(values: Record<string, string | undefine
 }
 
 /**
- * 为 action 或 proxy 取一个 maps access token。
+ * Acquire a Maps access token for an action or proxy request.
  *
- * 未到刷新时间的缓存 token 直接复用; 同一凭证已有在途换取时加入它 (single-flight);
- * 否则发起一次换取, 成功且有效期可用时写回缓存。失败的换取从不进缓存, 下一次调用会重新换取。
+ * Reuse an unexpired cached token or join an exchange already in flight for the credential.
+ * Otherwise exchange once and cache a successful token with a usable lifetime. Failed exchanges
+ * are never cached.
  */
 export async function acquireAppleMapsAccessToken(
   credential: AppleMapsCredential,
@@ -127,9 +128,9 @@ export async function acquireAppleMapsAccessToken(
 }
 
 /**
- * 业务端点以 401 拒绝某个 token 后调用。
+ * Evict a token after a business endpoint rejects it with 401.
  *
- * 只在缓存里存的仍是这一个 token 时才删除, 不误删并发运行刚换到的新 token。
+ * Delete it only if the cache still contains this token, preserving a replacement produced concurrently.
  */
 export function evictAppleMapsAccessToken(credential: AppleMapsCredential, accessToken: string): void {
   const key = tokenCacheKey(credential);
@@ -139,10 +140,11 @@ export function evictAppleMapsAccessToken(credential: AppleMapsCredential, acces
 }
 
 /**
- * 校验凭证: 不管缓存里有没有 token 都重新换取一次, 让结果反映密钥当前的状态。
+ * Validate credentials with a fresh exchange regardless of the cached token.
  *
- * 这次换取按 validate 阶段映射错误, 所以不登记成在途条目给执行路径加入, 否则执行路径会收到
- * 连接表单的字段错误。成功后把新 token 写回缓存, 紧接着的测试动作不必再换一次。
+ * The exchange uses validation-phase error mapping and is not exposed as an in-flight entry to
+ * executions, which must not receive connection-form field errors. Cache a successful token so
+ * the action immediately following validation need not exchange again.
  */
 export async function exchangeAppleMapsAccessTokenForValidation(
   credential: AppleMapsCredential,
@@ -159,9 +161,9 @@ async function exchangeAccessToken(
   phase: AppleMapsPhase,
 ): Promise<ExchangedAccessToken> {
   return runProviderRequest({ label: appleMapsProviderLabel }, async (signal) => {
-    // 签名放在回调里：私钥解析错误会作为 400 ProviderRequestError 原样透传。
+    // Sign inside the callback so private-key parsing errors remain 400 ProviderRequestError instances.
     const authToken = await signAuthToken(credential);
-    // 有效期从发请求之前算起, 网络耗时只会让刷新提前, 不会让 token 被用到过期之后
+    // Start the lifetime before the request so network time advances refresh instead of extending expiry.
     const requestedAt = Date.now();
     const response = await fetcher(`${appleMapsApiOrigin}${appleMapsTokenPath}`, {
       method: "GET",
@@ -189,11 +191,11 @@ async function exchangeAccessToken(
   });
 }
 
-/** 签一个只用于换取 access token 的 ES256 maps auth token */
+/** Sign an ES256 Maps auth token used only to exchange an access token. */
 async function signAuthToken(credential: AppleMapsCredential): Promise<string> {
   const signingKey = await importAppleMapsKey(credential.privateKey);
   const issuedAt = Math.floor(Date.now() / 1000);
-  // Maps Server API 只要 server_api scope; origin 只有 mapkit_js / web_snapshots / embed_api 才要求, 不带
+  // Maps Server API needs only the server_api scope; origin applies to browser-facing scopes.
   return new SignJWT({ scope: "server_api" })
     .setProtectedHeader({ alg: "ES256", kid: credential.keyId, typ: "JWT" })
     .setIssuer(credential.teamId)
@@ -206,7 +208,7 @@ async function importAppleMapsKey(privateKey: string): Promise<CryptoKey> {
   try {
     return await importPKCS8(privateKey, "ES256");
   } catch {
-    // 不把 jose 的原始错误链上去, 避免私钥片段进入错误消息或日志
+    // Do not chain the jose error because it may expose private-key fragments in messages or logs.
     throw new ProviderRequestError(
       400,
       "privateKey must be an EC P-256 private key in PKCS#8 PEM format, as downloaded from the Apple Developer account",
@@ -215,14 +217,14 @@ async function importAppleMapsKey(privateKey: string): Promise<CryptoKey> {
 }
 
 /**
- * 三个字段用 NUL 分隔后取 SHA-256, 缓存里不留任何明文凭证。
- * NUL 不会出现在这几个字段里, 所以拼接不会让两组不同的凭证撞成同一个 key。
+ * Hash the three NUL-delimited fields so the cache retains no plaintext credentials.
+ * NUL cannot occur in these fields, so distinct credentials cannot produce the same joined input.
  */
 function tokenCacheKey(credential: AppleMapsCredential): string {
   return sha256Hex([credential.teamId, credential.keyId, credential.privateKey].join("\0"));
 }
 
-/** 按有效期决定写回缓存还是丢弃; 没有可用有效期的 token 只给当前请求用 */
+/** Cache tokens with a usable lifetime; otherwise keep them scoped to the current request. */
 function settleEntry(key: string, token: ExchangedAccessToken): void {
   if (token.refreshAt === undefined) {
     tokenCache.delete(key);
@@ -232,7 +234,7 @@ function settleEntry(key: string, token: ExchangedAccessToken): void {
 }
 
 function rememberEntry(key: string, entry: TokenCacheEntry): void {
-  // 先删再插, 让 Map 的插入顺序就是最近使用顺序, 超出上限时淘汰最久未用的那一条
+  // Reinsert to maintain recency order, then evict the least recently used entry at the limit.
   tokenCache.delete(key);
   tokenCache.set(key, entry);
   if (tokenCache.size > maximumTokenCacheEntries) {

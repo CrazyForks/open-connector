@@ -6,7 +6,7 @@ import { dateTimeSchema } from "./schemas.ts";
 
 const service = "sf_express";
 
-/** SF's own request samples send codes outside 附录4.2, so the value stays open. */
+/** SF's own request samples send codes outside Appendix 4.2, so the value stays open. */
 const temperatureLevelCodeSchema = s.nonEmptyString(
   "The cold-chain temperature level code from 附录4.2, for example 2 = 0至10 (冷藏), 5 = 18至22, 9 = 0至4, 10 = -18以下, 30 = 冷冻, 31 = 常温 (ambient).",
 );

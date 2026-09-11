@@ -52,7 +52,7 @@ const headerInputSchema = s.object("The request header block required by this en
   optional: ["deptCode", "netCode"],
 });
 
-/** COM_RECE_EOS_ADD_STORE_INFO is the one EOS endpoint whose header table marks every field 否. */
+/** COM_RECE_EOS_ADD_STORE_INFO is the one EOS endpoint whose header table marks every field optional. */
 const optionalHeaderInputSchema = s.object("The request header block; every field is optional here.", headerFields, {
   optional: ["operatorId", "deptCode", "netCode", "accessCode"],
 });

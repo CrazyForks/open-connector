@@ -8,7 +8,7 @@ import { patsnapLandscapeActions } from "./landscape-actions.ts";
 import { patsnapResultSchema as resultSchema } from "./schemas.ts";
 import { patsnapServerNames } from "./servers.ts";
 
-// 工具名及参数来自官方 core-patents 页面；不要用 REST 的 sort 数组替换 MCP 的排序字段。
+// Tool names and parameters come from the official core-patents page. Do not replace the MCP sort field with the REST sort array.
 const patsnapCoreActions: ProviderActionDefinition[] = [
   defineProviderAction("patsnap_mcp", {
     name: "transfer_data",
