@@ -751,47 +751,42 @@ function dropboxAuthHeaders(accessToken: string) {
 
 async function normalizeDropboxHttpError(response: Response, fallbackMessage: string) {
   const contentType = response.headers.get("content-type") ?? "";
-  let payload: Record<string, unknown> | null = null;
-  let message = "";
+  const responseText = await response.text();
+  let body: unknown = responseText;
 
   if (contentType.includes("application/json")) {
-    payload = await readJsonRecord(response);
-    message = resolveDropboxErrorMessage(payload) ?? fallbackMessage;
-  } else {
-    const text = (await response.text()).trim();
-    message = text || fallbackMessage;
+    try {
+      body = JSON.parse(responseText) as unknown;
+    } catch {
+      // Dropbox 的错误体可能与 Content-Type 声明不一致，此时保留原文。
+    }
   }
 
-  if (response.status === 401) {
-    return new ProviderRequestError(401, message);
-  }
-  if (response.status === 403) {
-    return new ProviderRequestError(403, message);
-  }
-  if (response.status === 429) {
-    return new ProviderRequestError(429, message);
-  }
-
-  return new ProviderRequestError(response.status >= 500 ? 502 : response.status, message);
+  return new ProviderRequestError(
+    response.status >= 500 ? 502 : response.status,
+    resolveDropboxErrorMessage(body, fallbackMessage),
+    {
+      upstreamStatus: response.status,
+      requestId: response.headers.get("x-dropbox-request-id"),
+      body,
+    },
+  );
 }
 
-function resolveDropboxErrorMessage(payload: Record<string, unknown>) {
-  const errorSummary = optionalString(payload.error_summary);
+function resolveDropboxErrorMessage(body: unknown, fallbackMessage: string) {
+  const payload = asOptionalObject(body);
+  const errorSummary = asOptionalString(payload?.error_summary);
   if (errorSummary) {
-    return trimDropboxErrorSummary(errorSummary);
+    return errorSummary;
   }
 
-  const error = asOptionalObject(payload.error);
-  const errorTag = optionalString(error?.[".tag"]);
+  const errorTag = asOptionalString(asOptionalObject(payload?.error)?.[".tag"]);
   if (errorTag) {
     return errorTag;
   }
 
-  return undefined;
-}
-
-function trimDropboxErrorSummary(value: string) {
-  return value.endsWith("/...") ? value.slice(0, -4) : value;
+  if (typeof body === "string" && body.trim()) return body.trim();
+  return fallbackMessage;
 }
 
 function parseDropboxApiResultHeader(response: Response) {
