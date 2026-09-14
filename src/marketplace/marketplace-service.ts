@@ -4,8 +4,7 @@ import type { ISecretCodec } from "../server/secrets/secret-codec-core.ts";
 
 import { assertPublicHttpUrl } from "../core/request.ts";
 import { providerFetch } from "../providers/provider-runtime.ts";
-
-export const defaultMarketplaceDiscoveryUrl = "https://connector.oomol.com/.well-known/oomol-connector-marketplace";
+import { defaultMarketplaceDiscoveryUrl } from "./default-marketplace.ts";
 const maximumDiscoveryBytes = 4 * 1024 * 1024;
 
 export type MarketplacePricing = "free" | "metered";
@@ -146,6 +145,9 @@ export class MarketplaceService {
   async configure(input: MarketplaceConfigInput): Promise<MarketplaceState> {
     const previous = await this.options.store.getConfig();
     const discoveryUrl = input.discoveryUrl?.trim() || previous?.discoveryUrl || defaultMarketplaceDiscoveryUrl;
+    if (previous && discoveryUrl !== previous.discoveryUrl && !input.apiKey?.trim()) {
+      throw new MarketplaceError("invalid_input", "A new apiKey is required when changing the discovery URL.");
+    }
     const apiKey =
       input.apiKey?.trim() || (previous ? await this.options.secretCodec.decode(previous.apiKeyEncrypted) : "");
     if (!apiKey) throw new MarketplaceError("invalid_input", "apiKey is required.");
@@ -180,7 +182,8 @@ export class MarketplaceService {
   }
 
   async listProviderPreferences(): Promise<ProviderPreference[]> {
-    return await this.options.store.listProviderPreferences();
+    const preferences = await this.options.store.listProviderPreferences();
+    return preferences.filter((preference) => this.snapshot?.actionsByService.has(preference.service));
   }
 
   async setProviderEnabled(service: string, enabled: boolean): Promise<ProviderPreference> {
@@ -282,7 +285,11 @@ export class MarketplaceService {
       fieldName: "discoveryUrl",
       createError: (message) => new MarketplaceError("invalid_marketplace_discovery", message),
     });
-    const response = await this.fetch(url, { headers: { accept: "application/json" }, redirect: "manual" });
+    const response = await this.fetch(url, {
+      headers: { accept: "application/json" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
+    });
     if (300 <= response.status && response.status < 400) {
       throw new MarketplaceError("invalid_marketplace_discovery", "Marketplace discovery redirects are not allowed.");
     }

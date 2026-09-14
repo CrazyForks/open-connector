@@ -27,6 +27,45 @@ const provider: ProviderDefinition = {
 };
 
 describe("MarketplaceService", () => {
+  it("keeps the current source on failed replacement and hides old preferences after a successful switch", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/validate") return new Response(null, { status: 204 });
+      if (url.hostname === "broken.example") throw new Error("offline");
+      return jsonResponse({
+        version: 1,
+        id: url.hostname,
+        name: url.hostname,
+        pricing: "metered",
+        validate: "/validate",
+        endpoint: "/actions",
+        actions: url.hostname === "first.example" ? ["example.run"] : ["remote.only"],
+      });
+    });
+    const store = new MemoryMarketplaceStore();
+    const service = new MarketplaceService({
+      catalog: createCatalogStore([provider]),
+      store,
+      secretCodec: reversibleCodec,
+      fetcher,
+    });
+    await service.configure({ discoveryUrl: "https://first.example/discovery", apiKey: "first-key" });
+    const count = fetcher.mock.calls.length;
+    await expect(service.configure({ discoveryUrl: "https://other.example/discovery" })).rejects.toThrow("new apiKey");
+    expect(fetcher).toHaveBeenCalledTimes(count);
+    await expect(
+      service.configure({ discoveryUrl: "https://broken.example/discovery", apiKey: "new-key" }),
+    ).rejects.toThrow("offline");
+    expect(service.getState().discoveryUrl).toBe("https://first.example/discovery");
+    expect(await service.listProviderPreferences()).toHaveLength(1);
+    await service.configure({ discoveryUrl: "https://other.example/discovery", apiKey: "new-key" });
+    expect(await service.listProviderPreferences()).toEqual([]);
+    expect(await store.listProviderPreferences()).toHaveLength(1);
+    await service.remove();
+    expect(await service.listProviderPreferences()).toEqual([]);
+    expect(service.getState().configured).toBe(false);
+  });
+
   it("validates discovery and derives only locally compatible actions", async () => {
     const store = new MemoryMarketplaceStore();
     const fetcher = vi

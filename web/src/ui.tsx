@@ -29,10 +29,12 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router";
+import { defaultMarketplaceDiscoveryUrl, isDefaultMarketplace } from "../../src/marketplace/default-marketplace";
 import { AccessPage } from "./access-page";
 import { ActionsPage } from "./actions-page";
 import { ApiError, apiGet, apiPost } from "./api";
 import oomolConnectLogoUrl from "./assets/oomol-connect-logo.png";
+import { HostedServicePromo } from "./hosted-service-promo";
 import { persistLang, supportedLangs } from "./i18n";
 import { MarketplacePage } from "./marketplace-page";
 import { emptyData } from "./model";
@@ -360,21 +362,26 @@ function AppShell(props: {
           </div>
         </div>
 
-        <nav className="sidebar-nav" aria-label={t("shell.primaryNav")}>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.path}
-                className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
-                to={item.path}
-              >
-                <Icon size={16} />
-                <span>{t(item.labelKey)}</span>
-              </NavLink>
-            );
-          })}
-        </nav>
+        <div className="sidebar-content">
+          <nav className="sidebar-nav" aria-label={t("shell.primaryNav")}>
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.path}
+                  className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
+                  to={item.path}
+                >
+                  <Icon size={16} />
+                  <span>{t(item.labelKey)}</span>
+                </NavLink>
+              );
+            })}
+          </nav>
+          {isDefaultMarketplace(props.data.marketplace?.discoveryUrl ?? defaultMarketplaceDiscoveryUrl) ? (
+            <HostedServicePromo />
+          ) : null}
+        </div>
 
         <div className="sidebar-footer">
           <LanguageSelect />
