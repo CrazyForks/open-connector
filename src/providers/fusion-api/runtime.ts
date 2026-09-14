@@ -14,6 +14,8 @@ import { fusionApiOperations } from "./operations.ts";
 
 export const fusionApiDefaultBaseUrl = "https://fusion-api.oomol.com";
 const fusionApiDefaultRequestTimeoutMs = 30_000;
+const fusionApiLongRunningRequestTimeoutMs = 300_000;
+const fusionApiLongRunningPaths = new Set(["/v1/deepseek-ocr/action/recognize", "/v1/jina-reader/action/read"]);
 const fusionApiValidationPath = "/openapi/qwen-image?hideTaskStateAPI=true";
 
 type FusionApiActionContext = ApiKeyProviderContext;
@@ -103,7 +105,10 @@ async function fusionApiRequest(context: FusionApiRequestContext, request: Fusio
     }
   }
 
-  const timeout = createProviderTimeout(context.signal, fusionApiDefaultRequestTimeoutMs);
+  const requestTimeoutMs = fusionApiLongRunningPaths.has(request.path)
+    ? fusionApiLongRunningRequestTimeoutMs
+    : fusionApiDefaultRequestTimeoutMs;
+  const timeout = createProviderTimeout(context.signal, requestTimeoutMs);
   let response: Response;
   try {
     response = await context.fetcher(url, {
@@ -115,8 +120,8 @@ async function fusionApiRequest(context: FusionApiRequestContext, request: Fusio
   } catch (error) {
     if (timeout.didTimeout() && isAbortLikeError(error)) {
       throw new ProviderRequestError(
-        502,
-        `fusion-api ${request.path} request timed out after ${Math.ceil(fusionApiDefaultRequestTimeoutMs / 1000)} seconds`,
+        504,
+        `fusion-api ${request.path} request timed out after ${Math.ceil(requestTimeoutMs / 1000)} seconds`,
       );
     }
     const message = error instanceof Error && error.message.trim() ? error.message : "request failed";

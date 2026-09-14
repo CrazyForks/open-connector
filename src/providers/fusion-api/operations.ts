@@ -1726,8 +1726,8 @@ export const fusionApiOperations: FusionApiOperation[] = [
         kind: "string",
         required: false,
         description:
-          "File parsing strategy: auto selects automatically, fast parses quickly, and quality prioritizes parsing quality",
-        enumValues: ["auto", "fast", "quality"],
+          "File parsing strategy: auto selects automatically, text_only parses text only, and text_and_images parses text and images",
+        enumValues: ["auto", "text_only", "text_and_images"],
         defaultValue: "auto",
       },
     ],

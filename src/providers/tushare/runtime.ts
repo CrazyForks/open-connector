@@ -408,7 +408,8 @@ function createTushareApiError(code: number, payload: Record<string, unknown>): 
   const message = `Tushare request failed: ${extractErrorMessage(payload) ?? `code ${code}`}`;
   if (code === 40101) return new ProviderRequestError(400, message, payload);
   if (code === 2002) return new ProviderRequestError(403, message, payload);
-  if (code === 2003 || code === 2004) return new ProviderRequestError(429, message, payload);
+  if (code === 2003 || code === 2004 || message.includes("频率超限"))
+    return new ProviderRequestError(429, message, payload);
   return new ProviderRequestError(502, message, payload);
 }
 
