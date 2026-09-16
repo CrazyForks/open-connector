@@ -349,6 +349,8 @@ export interface ExecutionContext {
   transitFiles?: TransitFileWriter;
   /** Optional cancellation signal propagated from the HTTP request or runner. */
   signal?: AbortSignal;
+  /** Host logger for provider diagnostics, absent when the host supplies none. */
+  logger?: RuntimeLogger;
 }
 
 /**

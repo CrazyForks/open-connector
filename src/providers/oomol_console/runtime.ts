@@ -1,3 +1,4 @@
+import type { RuntimeLogger } from "../../core/types.ts";
 import type { ProviderActionName } from "../provider-runtime.ts";
 import type { OomolConsoleMemberDirectory } from "./member-directory.ts";
 import type { ConnectionActionPermission, ConnectionPermissionGroupsState } from "./permission-groups.ts";
@@ -19,6 +20,7 @@ export interface OomolConsoleContext {
   teamId?: string;
   fetcher: typeof fetch;
   signal?: AbortSignal;
+  logger?: RuntimeLogger;
 }
 
 export interface OomolConsoleRuntimeDeps {
@@ -173,7 +175,7 @@ export async function executeOomolConsoleAction(
       const teamId = requireTeamId(context);
       const members = await listTeamMembers(teamId, apiKey, fetcher, deps.endpoints);
       return {
-        members: await deps.memberDirectory.enrichMembers(members, apiKey, fetcher),
+        members: await deps.memberDirectory.enrichMembers(members, apiKey, fetcher, context.logger),
       };
     }
     case "list_team_connections": {
@@ -193,7 +195,7 @@ export async function executeOomolConsoleAction(
       );
       return buildPermissionGroupsSnapshot({
         ...permissionContext,
-        members: await deps.memberDirectory.enrichMembers(permissionContext.members, apiKey, fetcher),
+        members: await deps.memberDirectory.enrichMembers(permissionContext.members, apiKey, fetcher, context.logger),
       });
     }
     case "update_connection_default_permission_group":
@@ -511,7 +513,7 @@ async function mutateConnectionPermissionGroups(
   }
   const snapshot = buildPermissionGroupsSnapshot({
     ...loaded,
-    members: await memberDirectory.enrichMembers(loaded.members, apiKey, fetcher),
+    members: await memberDirectory.enrichMembers(loaded.members, apiKey, fetcher, context.logger),
     revision,
     policy: writtenPolicy,
     state: reparsed.value,

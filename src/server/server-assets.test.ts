@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveServerAssets } from "./server-assets.ts";
-import { defaultMigrationSource } from "./storage/migration-source.ts";
 
 const tempDirs: string[] = [];
 
@@ -25,7 +24,7 @@ describe("resolveServerAssets", () => {
 
     expect(assets.catalogDir).toBe(join(cwd, "catalog/apps"));
     expect(assets.catalogIndexFile).toBe(join(cwd, "catalog/apps-index.json"));
-    expect(assets.migrations).toBe(defaultMigrationSource);
+    expect(assets.migrationDirectory).toBe(join(import.meta.dirname, "../../migrations"));
     expect(assets.staticRoot).toBe(join(cwd, "dist/web"));
     expect(assets.embedded).toBe(false);
   });
@@ -37,7 +36,7 @@ describe("resolveServerAssets", () => {
     const assets = await resolveServerAssets();
 
     expect(assets.catalogDir).toBe(join(cwd, "catalog/apps"));
-    expect(assets.migrations).toBe(defaultMigrationSource);
+    expect(assets.migrationDirectory).toBe(join(import.meta.dirname, "../../migrations"));
     expect(assets.staticRoot).toBeUndefined();
     expect(assets.embedded).toBe(false);
   });
@@ -60,9 +59,7 @@ describe("resolveServerAssets", () => {
 
     expect(assets.embedded).toBe(true);
     expect(assets.catalogDir).toBe(join(root, "apps"));
-    // The directory source touches the filesystem lazily; the ENOENT it raises names the embedded directory.
-    expect(assets.migrations).not.toBe(defaultMigrationSource);
-    expect(() => assets.migrations.readMigrations("sqlite")).toThrow(join(root, "migrations"));
+    expect(assets.migrationDirectory).toBe(join(root, "migrations"));
     // Neither web/index.html nor apps-index.json lives beside this module, so both are reported as absent.
     expect(assets.staticRoot).toBeUndefined();
     expect(assets.catalogIndexFile).toBeUndefined();

@@ -75,6 +75,7 @@ export const executors: ProviderExecutors = defineProviderExecutors<OomolConsole
       teamId: credential.values.teamId?.trim() || undefined,
       fetcher,
       signal: context.signal,
+      logger: context.logger,
     };
   },
   fallbackMessage: "OOMOL Console request failed",
@@ -82,12 +83,13 @@ export const executors: ProviderExecutors = defineProviderExecutors<OomolConsole
 });
 
 export const credentialValidators: CredentialValidators = {
-  async apiKey(input, { fetcher, signal }): Promise<CredentialValidationResult> {
+  async apiKey(input, { fetcher, signal, logger }): Promise<CredentialValidationResult> {
     const context: OomolConsoleContext = {
       apiKey: input.apiKey,
       teamId: input.values.teamId?.trim() || undefined,
       fetcher: createProviderFetch({ fetch: fetcher, skipDnsValidation: true }),
       signal,
+      logger,
     };
     const result = await executeOomolConsoleAction("list_teams", {}, context, context.fetcher, {
       endpoints: defaultEndpoints,

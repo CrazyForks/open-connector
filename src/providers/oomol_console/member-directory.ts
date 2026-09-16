@@ -1,6 +1,6 @@
+import type { RuntimeLogger } from "../../core/types.ts";
 import type { OomolConsoleEndpoints } from "./request.ts";
 
-import { logger } from "../../server/logger.ts";
 import { ProviderRequestError } from "../provider-runtime.ts";
 import { requestOomolConsole } from "./request.ts";
 
@@ -29,6 +29,7 @@ export interface OomolConsoleMemberDirectory {
     members: readonly TMember[],
     apiKey: string,
     fetcher: typeof fetch,
+    logger?: RuntimeLogger,
   ): Promise<TMember[]>;
 }
 
@@ -40,6 +41,7 @@ export function createOomolConsoleMemberDirectory(endpoints: OomolConsoleEndpoin
       members: readonly TMember[],
       apiKey: string,
       fetcher: typeof fetch,
+      logger?: RuntimeLogger,
     ) {
       const unresolvedUserIds = uniqueIds(
         members
@@ -54,11 +56,11 @@ export function createOomolConsoleMemberDirectory(endpoints: OomolConsoleEndpoin
 
       const [userSummaries, serviceAccountNames] = await Promise.all([
         loadUserSummaries(unresolvedUserIds, apiKey, fetcher, endpoints, userSummaryCache).catch((error: unknown) => {
-          logger.warn(enrichmentErrorLog(error), "OOMOL Console user-summary enrichment failed");
+          logger?.warn(enrichmentErrorLog(error), "OOMOL Console user-summary enrichment failed");
           return new Map<string, UserSummary>();
         }),
         loadServiceAccountNames(unresolvedServiceAccountIds, apiKey, fetcher, endpoints).catch((error: unknown) => {
-          logger.warn(enrichmentErrorLog(error), "OOMOL Console service-account enrichment failed");
+          logger?.warn(enrichmentErrorLog(error), "OOMOL Console service-account enrichment failed");
           return new Map<string, string>();
         }),
       ]);

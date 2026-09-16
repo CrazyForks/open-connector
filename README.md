@@ -236,6 +236,7 @@ Issues and pull requests are welcome.
 - [Gmail OAuth and SDK tutorial](docs/gmail-oauth-sdk.md)
 - [Instagram OAuth and Actions](docs/instagram-oauth.md)
 - [Runtime API and MCP](docs/runtime-api.md)
+- [Embed the runtime](docs/headless.md)
 - [Deployment options](docs/deployment-options/)
 - [Fly.io deployment](docs/fly-io.md)
 - [Cloudflare deployment](docs/cloudflare.md)
