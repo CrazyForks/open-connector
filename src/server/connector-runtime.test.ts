@@ -69,6 +69,19 @@ describe("headless runtime", () => {
 
   it("derives the provider callback from the host URL and honors the host return URI", async () => {
     runtime = await createConnectorRuntime(await fixture());
+    const setupResponse = await request("/v1/providers/github/setup");
+    expect(setupResponse.headers.get("cache-control")).toBe("no-store");
+    const setup = (await setupResponse.json()).data;
+    expect(setup.oauthClient).toMatchObject({
+      configured: false,
+      expectedRedirectUri: `${publicOrigin}/oauth/callback`,
+      missingFields: ["clientId", "clientSecret"],
+    });
+    const dashboard = await (await request("/api/providers")).json();
+    expect(dashboard[0].setup).toEqual(setup.auth);
+    expect(JSON.stringify(setup)).not.toMatch(/authorizationUrl|tokenUrl|tokenEndpointAuthMethod/);
+    expect((await request("/v1/providers/github/setup", undefined, "runtime-token")).status).toBe(401);
+    expect((await request("/v1/providers/missing/setup")).status).toBe(404);
     const configured = await request(
       "/api/oauth/configs/github",
       { clientId: "fixture-client", clientSecret: "fixture-secret" },
@@ -77,6 +90,9 @@ describe("headless runtime", () => {
     );
     expect(configured.status).toBe(200);
     expect((await configured.json()).expectedRedirectUri).toBe(`${publicOrigin}/oauth/callback`);
+    const savedSetup = await (await request("/v1/providers/github/setup")).json();
+    expect(savedSetup.data.oauthClient).toMatchObject({ configured: true, missingFields: [] });
+    expect(JSON.stringify(savedSetup)).not.toMatch(/fixture-client|fixture-secret/);
     const started = await request("/v1/connections/github/connect", {
       returnUri: "https://host.example/settings/connections",
     });

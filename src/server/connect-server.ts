@@ -48,7 +48,9 @@ import {
   serializeRuntimeConnectedApp,
   serializeRuntimeFailure,
   serializeRuntimeProvider,
+  serializeRuntimeProviderSetup,
   unknownActionFailure,
+  unknownServiceFailure,
   writeRuntimeActionHttpResult,
   writeRuntimeFailure,
   writeRuntimeSuccess,
@@ -191,6 +193,9 @@ export class ConnectServer {
       );
     }
     app.get("/v1/health", (context) => writeRuntimeSuccess(context, { ok: true, runtime: "oomol-connect" }));
+    app.get("/v1/providers/:service/setup", (context) =>
+      this.getRuntimeProviderSetup(context, context.req.param("service")),
+    );
     app.get("/v1/providers", (context) => this.listRuntimeProviders(context));
     app.get("/v1/actions", (context) => this.listRuntimeActions(context));
     app.get("/v1/actions/search", (context) => this.searchRuntimeActions(context));
@@ -342,6 +347,15 @@ export class ConnectServer {
       if (error instanceof MarketplaceError) return jsonError(context, 404, error.code, error.message);
       throw error;
     }
+  }
+
+  private async getRuntimeProviderSetup(context: Context, service: string): Promise<Response> {
+    const provider = this.options.catalog.providers.find((provider) => provider.service === service);
+    if (!provider) return writeRuntimeFailure(context, unknownServiceFailure(service));
+    const oauth = provider.auth.some((auth) => auth.type === "oauth2")
+      ? await this.options.oauthClientConfigs.getSummary(service)
+      : undefined;
+    return writeRuntimeSuccess(context, serializeRuntimeProviderSetup(provider, oauth));
   }
 
   private getProvider(context: Context, service: string): Response {

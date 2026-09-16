@@ -283,3 +283,5 @@ function releaseRuntime(): void {
   setEgressTrustedHosts([]);
   runtimeActive = false;
 }
+
+export type { RuntimeProviderSetup } from "./api/runtime-api.ts";

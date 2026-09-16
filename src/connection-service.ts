@@ -16,6 +16,7 @@ import type { IOAuthCredentialRefresher } from "./oauth/oauth-credential-refresh
 import type { IProviderLoader } from "./providers/provider-loader.ts";
 
 import { normalizeCredentialValues } from "./core/credential-fields.ts";
+import { apiKeyCredentialFields } from "./core/provider-setup.ts";
 import { providerFetch } from "./providers/provider-runtime.ts";
 
 export const defaultConnectionName = "default";
@@ -325,7 +326,7 @@ export class ConnectionService {
 
     const auth = this.getApiKeyDefinition(provider);
     const values = normalizeCredentialValues({
-      fields: createApiKeyFields(auth),
+      fields: apiKeyCredentialFields(auth),
       values: input.values ?? {},
       createError: (message) => new ConnectionError("invalid_input", message),
     });
@@ -338,7 +339,7 @@ export class ConnectionService {
       ...this.buildCredentialRuntimeData(
         provider,
         "api_key",
-        createApiKeyFields(auth),
+        apiKeyCredentialFields(auth),
         values,
         await this.validateApiKeyCredential(service, { apiKey, values }, input.signal),
       ),
@@ -865,21 +866,6 @@ function isOAuthCredentialExpired(credential: Extract<ResolvedCredential, { auth
 
   const expiresAt = Date.parse(credential.expiresAt);
   return Number.isFinite(expiresAt) && expiresAt <= Date.now() + 60_000;
-}
-
-function createApiKeyFields(auth: ApiKeyAuthDefinition): CredentialDefinition[] {
-  return [
-    {
-      key: "apiKey",
-      label: auth.label ?? "API key",
-      inputType: "password",
-      required: true,
-      secret: true,
-      placeholder: auth.placeholder,
-      description: auth.description,
-    },
-    ...(auth.extraFields ?? []),
-  ];
 }
 
 export function normalizeConnectionName(value: string | undefined): string {

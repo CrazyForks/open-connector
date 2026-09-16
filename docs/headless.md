@@ -47,3 +47,10 @@ with `apiReference: true`.
 For Bun executables, include `getConnectorAssetDirectory()` in `compile.assets`, with
 `splitting: true` and `external: ["proxy-agent"]`. Keep the asset directory named `open-connector`;
 package assets resolve independently of the working directory.
+
+## Provider setup
+
+`GET /v1/providers/:service/setup` uses administrator authentication and returns the required input
+fields, provider registration help, configured callback URL, and missing OAuth client values.
+It includes no saved secrets. Submit values through the existing connection and OAuth configuration
+APIs. The dashboard consumes the same field descriptions through `/api/providers`.

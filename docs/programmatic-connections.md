@@ -21,6 +21,14 @@ apply their own user and Team management permissions.
 `GET /v1/connections` returns the administrator's stored connections, including connections
 hidden from execution discovery. It excludes virtual no-auth and Marketplace entries.
 
+## Discover setup requirements
+
+`GET /v1/providers/:service/setup` describes what a provider needs before it can be connected:
+the credential fields of each supported credential type, the OAuth client inputs, the scopes the
+connector requests, the provider's registration steps, the callback URL to register, and which
+OAuth client inputs are still missing. It never returns saved values, so a host can build its own
+connection form from it and submit through the endpoints below.
+
 ## Start and track OAuth
 
 Configure your provider's OAuth client through the console or `/api/oauth/configs/:service`
