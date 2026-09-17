@@ -9,6 +9,14 @@ const departmentIdType = s.stringEnum("The identifier type used for departments.
 ]);
 const targetType = s.stringEnum("The OKR target level.", ["objective", "key_result"]);
 const targetId = s.string("The objective or key-result ID.", { minLength: 1 });
+const commentId = s.nonEmptyString("The OKR comment ID.");
+const commentTargetType = s.stringEnum("The OKR entity type that owns the comment.", [
+  "cycle",
+  "progress",
+  "objective",
+  "key_result",
+]);
+const commentContent = s.looseRequiredObject("The Feishu OKR ContentBlock payload for the comment.", {});
 const pageSize = s.positiveInteger("The maximum number of results on this page.", {
   maximum: 50,
 });
@@ -83,8 +91,11 @@ const categoryPageOutput = s.object(
     optional: [],
   },
 );
-export function createFeishuOkrActions(service: string): readonly ActionDefinition[] {
-  return [
+export function createFeishuOkrActions(
+  service: string,
+  identity: "tenant" | "user" = "user",
+): readonly ActionDefinition[] {
+  const actions: ActionDefinition[] = [
     defineProviderAction(service, {
       name: "list_okr_cycles",
       description: "List Feishu OKR cycles visible to a user.",
@@ -352,6 +363,7 @@ export function createFeishuOkrActions(service: string): readonly ActionDefiniti
       outputSchema: categoryPageOutput,
     }),
     ...progressActions(service),
+    ...commentReadActions(service),
     defineProviderAction(service, {
       name: "reorder_okrs",
       description: "Replace the objective or key-result order with an explicit ID sequence.",
@@ -455,7 +467,125 @@ export function createFeishuOkrActions(service: string): readonly ActionDefiniti
       ),
     }),
   ];
+  if (identity === "user") actions.push(...commentWriteActions(service));
+  return actions;
 }
+function commentReadActions(service: string): readonly ActionDefinition[] {
+  return [
+    defineProviderAction(service, {
+      name: "list_okr_comments",
+      description: "List one page of comments attached to a Feishu OKR entity.",
+      requiredScopes: ["okr:okr.comment.readonly"],
+      providerPermissions: ["okr:okr.comment.readonly"],
+      inputSchema: s.object(
+        "Identify the commented OKR entity and configure pagination.",
+        {
+          targetType: commentTargetType,
+          targetId: s.nonEmptyString("The cycle, progress, objective, or key-result ID."),
+          pageSize: extendedPageSize,
+          pageToken,
+          userIdType,
+        },
+        { optional: ["pageSize", "pageToken", "userIdType"] },
+      ),
+      outputSchema: pageOutput,
+    }),
+    defineProviderAction(service, {
+      name: "get_okr_comment",
+      description: "Get one Feishu OKR comment by ID.",
+      requiredScopes: ["okr:okr.comment.readonly"],
+      providerPermissions: ["okr:okr.comment.readonly"],
+      inputSchema: s.object("Identify the OKR comment.", { commentId, userIdType }, { optional: ["userIdType"] }),
+      outputSchema: s.object("The requested OKR comment.", { comment: looseItem }, { optional: [] }),
+    }),
+  ];
+}
+
+function commentWriteActions(service: string): readonly ActionDefinition[] {
+  const mutationOutput = s.object(
+    "The affected OKR comments.",
+    {
+      comments: s.array("The comments affected by this operation.", looseItem),
+    },
+    { optional: [] },
+  );
+  return [
+    defineProviderAction(service, {
+      name: "create_okr_comment",
+      description: "Create or reply to a Feishu OKR comment.",
+      requiredScopes: ["okr:okr.comment.writeonly"],
+      providerPermissions: ["okr:okr.comment.writeonly"],
+      inputSchema: s.object(
+        "Describe the OKR comment.",
+        {
+          targetType: commentTargetType,
+          targetId: s.nonEmptyString("The cycle, progress, objective, or key-result ID."),
+          content: commentContent,
+          selectedText: s.nonEmptyString("The selected objective or key-result text to comment on."),
+          refCommentId: s.nonEmptyString("The existing comment ID to reply to."),
+          userIdType,
+        },
+        { optional: ["selectedText", "refCommentId", "userIdType"] },
+      ),
+      outputSchema: s.object(
+        "The created OKR comment identifiers.",
+        {
+          commentId: s.string("The created comment ID."),
+          selectionId: s.nullable(s.string("The created selection ID, when applicable.")),
+        },
+        { optional: [] },
+      ),
+    }),
+    defineProviderAction(service, {
+      name: "update_okr_comment",
+      description: "Replace the content of a Feishu OKR comment.",
+      requiredScopes: ["okr:okr.comment.writeonly"],
+      providerPermissions: ["okr:okr.comment.writeonly"],
+      inputSchema: s.object(
+        "Identify the comment and provide replacement content.",
+        { commentId, content: commentContent, userIdType },
+        { optional: ["userIdType"] },
+      ),
+      outputSchema: s.object("The updated OKR comment.", { comment: looseItem }, { optional: [] }),
+    }),
+    defineProviderAction(service, {
+      name: "solve_okr_comment",
+      description: "Mark a Feishu OKR comment or its selection thread as solved.",
+      requiredScopes: ["okr:okr.comment.writeonly"],
+      providerPermissions: ["okr:okr.comment.writeonly"],
+      inputSchema: commentMutationInput("Identify the OKR comment to solve."),
+      outputSchema: mutationOutput,
+    }),
+    defineProviderAction(service, {
+      name: "reopen_okr_comment",
+      description: "Reopen a solved Feishu OKR comment or selection thread.",
+      requiredScopes: ["okr:okr.comment.writeonly"],
+      providerPermissions: ["okr:okr.comment.writeonly"],
+      inputSchema: commentMutationInput("Identify the OKR comment to reopen."),
+      outputSchema: mutationOutput,
+    }),
+    defineProviderAction(service, {
+      name: "delete_okr_comment",
+      description: "Permanently delete a Feishu OKR comment.",
+      requiredScopes: ["okr:okr.comment.delete"],
+      providerPermissions: ["okr:okr.comment.delete"],
+      inputSchema: s.object("Identify the OKR comment to delete.", { commentId }, { optional: [] }),
+      outputSchema: s.object(
+        "The comment deletion result.",
+        {
+          deleted: s.boolean("Whether the comment was deleted."),
+          commentId: s.string("The deleted comment ID."),
+        },
+        { optional: [] },
+      ),
+    }),
+  ];
+}
+
+function commentMutationInput(description: string) {
+  return s.object(description, { commentId, userIdType }, { optional: ["userIdType"] });
+}
+
 function progressActions(service: string): readonly ActionDefinition[] {
   const baseInput = {
     targetType,

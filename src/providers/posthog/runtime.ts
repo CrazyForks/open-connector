@@ -1518,6 +1518,7 @@ function mapPosthogError(input: {
     return new ProviderRequestError(400, message);
   }
 
+  if ([400, 409, 422].includes(input.status)) return new ProviderRequestError(400, message, undefined, "invalid_input");
   return new ProviderRequestError(input.status >= 500 ? 502 : input.status, message);
 }
 

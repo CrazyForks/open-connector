@@ -122,7 +122,9 @@ function normalize(result: ToolResult): unknown {
   if (result.structuredContent) return result.structuredContent;
   return result;
 }
-function errorEnvelope(result: ToolResult): { code: string; message?: string } | undefined {
+function errorEnvelope(
+  result: ToolResult,
+): { code: string; message?: string; providerResponse: Record<string, unknown> } | undefined {
   const candidates: unknown[] = [];
   if ("structuredContent" in result) candidates.push(result.structuredContent);
   const content = "content" in result && Array.isArray(result.content) ? result.content : [];
@@ -145,7 +147,11 @@ function errorEnvelope(result: ToolResult): { code: string; message?: string } |
     const record = object(candidate);
     const code = typeof record.code === "string" ? record.code.trim() : "";
     if (code.startsWith("ERROR_"))
-      return { code, message: typeof record.message === "string" ? record.message.trim() : undefined };
+      return {
+        code,
+        message: typeof record.message === "string" ? record.message.trim() : undefined,
+        providerResponse: record,
+      };
   }
   return undefined;
 }

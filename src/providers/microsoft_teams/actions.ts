@@ -160,7 +160,7 @@ const actions: MicrosoftTeamsActionSource[] = [
     "list_joined_teams",
     "List teams that the connected account has joined.",
     microsoftTeamsTeamScopes,
-    input({}),
+    input({ nextLink }),
     paginated("teams", team),
   ),
   action(

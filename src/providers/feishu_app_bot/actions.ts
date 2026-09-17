@@ -701,7 +701,7 @@ export const feishuAppBotActions: ActionDefinition[] = [
   ...createFeishuSheetsActions(service),
   ...createFeishuSheetsAdvancedActions(service),
   ...tenantMailActions([...createFeishuMailActions(service), ...createFeishuMailAdvancedActions(service)]),
-  ...createFeishuOkrActions(service),
+  ...createFeishuOkrActions(service, "tenant"),
   ...createFeishuFileActions(service),
   ...createFeishuVcActions({
     service,

@@ -91,10 +91,10 @@ async function getCurrentUser(context: OAuthProviderContext): Promise<unknown> {
   );
 }
 
-async function listJoinedTeams(_input: Record<string, unknown>, context: OAuthProviderContext): Promise<unknown> {
+async function listJoinedTeams(input: Record<string, unknown>, context: OAuthProviderContext): Promise<unknown> {
   const payload = await microsoftGraphJson<Record<string, unknown>>(
-    "me/joinedTeams",
-    requestOptions(context, "list joined teams"),
+    optionalString(input.nextLink) ?? "me/joinedTeams",
+    requestOptions(context, "list joined teams", undefined, (pathname) => pathname === "/v1.0/me/joinedTeams"),
   );
   return listOutput(payload, "teams");
 }

@@ -20,6 +20,7 @@ export interface McpClientOptions {
   redirect?: RequestRedirect;
   signal?: AbortSignal;
   protocolVersion?: McpProtocolVersion;
+  terminateSession?: boolean;
   mapError?: (error: unknown) => unknown;
 }
 
@@ -50,7 +51,27 @@ export async function withMcpClient<T>(options: McpClientOptions, run: (client: 
   } catch (error) {
     throw options.mapError ? options.mapError(error) : error;
   } finally {
+    if (options.terminateSession && transport instanceof StreamableHTTPClientTransport) {
+      await terminateMcpSession(transport);
+    }
     await client.close().catch(() => undefined);
+  }
+}
+
+async function terminateMcpSession(transport: StreamableHTTPClientTransport): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const termination = Promise.resolve()
+    .then(() => transport.terminateSession())
+    .catch(() => undefined);
+  try {
+    await Promise.race([
+      termination,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 2_000);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 

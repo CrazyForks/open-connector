@@ -1,7 +1,7 @@
 import type { FeishuJsonRequest } from "./client.ts";
 
-import { optionalNumber, optionalRecord } from "../../../core/cast.ts";
-import { providerInputError } from "../../provider-runtime.ts";
+import { optionalNumber, optionalRecord, requiredRecord } from "../../../core/cast.ts";
+import { providerInputError, requiredResponseRecord } from "../../provider-runtime.ts";
 import { requireFeishuResponseId } from "./response.ts";
 
 interface OkrActionHandler {
@@ -24,6 +24,13 @@ export function createFeishuOkrActionHandlers(request: FeishuJsonRequest): Recor
     create_okr_progress: (input) => createProgress(input, request),
     update_okr_progress: (input) => updateProgress(input, request),
     delete_okr_progress: (input) => deleteProgress(input, request),
+    list_okr_comments: (input) => listComments(input, request),
+    get_okr_comment: (input) => getComment(input, request),
+    create_okr_comment: (input) => createComment(input, request),
+    update_okr_comment: (input) => updateComment(input, request),
+    solve_okr_comment: (input) => mutateCommentStatus(input, "solve", request),
+    reopen_okr_comment: (input) => mutateCommentStatus(input, "reopen", request),
+    delete_okr_comment: (input) => deleteComment(input, request),
     reorder_okrs: (input) => reorderOkrs(input, request),
     update_okr_weights: (input) => updateWeights(input, request),
     update_okr_indicator: (input) => updateIndicator(input, request),
@@ -301,6 +308,81 @@ async function deleteProgress(input: Record<string, unknown>, request: FeishuJso
   return { deleted: true, progressId };
 }
 
+async function listComments(input: Record<string, unknown>, request: FeishuJsonRequest) {
+  const data = await request({
+    path: "/okr/v2/comments",
+    query: {
+      target_type: requiredCommentTargetType(input.targetType),
+      target_id: requiredString(input.targetId, "targetId"),
+      page_size: optionalNumber(input.pageSize) ?? 100,
+      page_token: optionalString(input.pageToken),
+      user_id_type: optionalString(input.userIdType) ?? "open_id",
+    },
+  });
+  return normalizePage(data);
+}
+
+async function getComment(input: Record<string, unknown>, request: FeishuJsonRequest) {
+  const commentId = requiredString(input.commentId, "commentId");
+  const data = await request({
+    path: `/okr/v2/comments/${encode(commentId)}`,
+    query: { user_id_type: optionalString(input.userIdType) ?? "open_id" },
+  });
+  return { comment: requiredResponseRecord(data.comment, "Feishu OKR comment") };
+}
+
+async function createComment(input: Record<string, unknown>, request: FeishuJsonRequest) {
+  const data = await request({
+    method: "POST",
+    path: "/okr/v2/comments",
+    query: { user_id_type: optionalString(input.userIdType) ?? "open_id" },
+    body: compact({
+      target: {
+        target_type: requiredCommentTargetType(input.targetType),
+        target_id: requiredString(input.targetId, "targetId"),
+      },
+      content: requiredRecord(input.content, "content", providerInputError),
+      selected_text: optionalString(input.selectedText),
+      ref_comment_id: optionalString(input.refCommentId),
+    }),
+  });
+  return {
+    commentId: requireFeishuResponseId(data.comment_id, "comment_id"),
+    selectionId: optionalString(data.selection_id) ?? null,
+  };
+}
+
+async function updateComment(input: Record<string, unknown>, request: FeishuJsonRequest) {
+  const commentId = requiredString(input.commentId, "commentId");
+  const data = await request({
+    method: "PATCH",
+    path: `/okr/v2/comments/${encode(commentId)}`,
+    query: { user_id_type: optionalString(input.userIdType) ?? "open_id" },
+    body: { content: requiredRecord(input.content, "content", providerInputError) },
+  });
+  return { comment: requiredResponseRecord(data.comment, "Feishu OKR comment") };
+}
+
+async function mutateCommentStatus(
+  input: Record<string, unknown>,
+  operation: "reopen" | "solve",
+  request: FeishuJsonRequest,
+) {
+  const commentId = requiredString(input.commentId, "commentId");
+  const data = await request({
+    method: "POST",
+    path: `/okr/v2/comments/${encode(commentId)}/${operation}`,
+    query: { user_id_type: optionalString(input.userIdType) ?? "open_id" },
+  });
+  return { comments: recordArray(data.affected_comments) };
+}
+
+async function deleteComment(input: Record<string, unknown>, request: FeishuJsonRequest) {
+  const commentId = requiredString(input.commentId, "commentId");
+  await request({ method: "DELETE", path: `/okr/v2/comments/${encode(commentId)}` });
+  return { deleted: true, commentId };
+}
+
 async function reorderOkrs(input: Record<string, unknown>, request: FeishuJsonRequest) {
   const targetType = requiredTargetType(input.targetType);
   const parentId = requiredString(input.parentId, "parentId");
@@ -436,6 +518,13 @@ function requiredTargetType(value: unknown): "objective" | "key_result" {
     return value;
   }
   throw providerInputError("targetType must be objective or key_result");
+}
+
+function requiredCommentTargetType(value: unknown): "cycle" | "key_result" | "objective" | "progress" {
+  if (value === "cycle" || value === "progress" || value === "objective" || value === "key_result") {
+    return value;
+  }
+  throw providerInputError("targetType must be cycle, progress, objective, or key_result");
 }
 
 function normalizePage(data: Record<string, unknown>) {

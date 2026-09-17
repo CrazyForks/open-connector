@@ -40,7 +40,54 @@ const nonEmptyString = (description: string) => s.string(description, { minLengt
 const nullableString = (description: string) => s.nullable(s.string(description));
 const nullableInteger = (description: string) => s.nullable(s.integer(description));
 const nullableBoolean = (description: string) => s.nullable(s.boolean(description));
-const looseRequestObjectSchema = s.looseObject("A provider-defined Tencent Docs request object.");
+const spreadsheetRequestBodySchema = s.looseObject(
+  "The provider-defined body for one Tencent Docs spreadsheet operation.",
+);
+const documentRequestBodySchema = s.looseObject("The provider-defined body for one Tencent Docs document operation.");
+const updateRangeRequestBodySchema = s.looseRequiredObject("The range data to update in one Tencent Docs sheet.", {
+  sheetId: nonEmptyString("The unique Tencent Docs sheet ID."),
+  gridData: s.looseObject("The Tencent Docs grid data to write."),
+});
+const spreadsheetBatchRequestSchema = s.oneOf(
+  [
+    s.object(
+      "A request to add a Tencent Docs sheet.",
+      {
+        addSheetRequest: spreadsheetRequestBodySchema,
+      },
+      { optional: [] },
+    ),
+    s.object(
+      "A request to update a range in a Tencent Docs sheet.",
+      {
+        updateRangeRequest: updateRangeRequestBodySchema,
+      },
+      { optional: [] },
+    ),
+    s.object(
+      "A request to delete rows or columns from a Tencent Docs sheet.",
+      {
+        deleteDimensionRequest: spreadsheetRequestBodySchema,
+      },
+      { optional: [] },
+    ),
+    s.object(
+      "A request to delete a Tencent Docs sheet.",
+      {
+        deleteSheetRequest: spreadsheetRequestBodySchema,
+      },
+      { optional: [] },
+    ),
+    s.object(
+      "A request to insert an image into a Tencent Docs sheet.",
+      {
+        insertImageRequest: spreadsheetRequestBodySchema,
+      },
+      { optional: [] },
+    ),
+  ],
+  { description: "Exactly one supported Tencent Docs spreadsheet batch operation." },
+);
 
 function defineAction(
   input: Omit<Parameters<typeof defineProviderAction>[1], "name"> & { service?: string; name: string },
@@ -135,7 +182,7 @@ const sheetRangeInputSchema = s.object("Input for reading a Tencent Docs spreads
 
 const batchUpdateSheetInputSchema = s.object("Input for batch-updating a Tencent Docs sheet.", {
   fileID: nonEmptyString("The Tencent Docs spreadsheet file ID."),
-  requests: s.array("The Tencent Docs spreadsheet batch update requests.", looseRequestObjectSchema, {
+  requests: s.array("The Tencent Docs spreadsheet batch update requests.", spreadsheetBatchRequestSchema, {
     minItems: 1,
     maxItems: 5,
   }),
@@ -145,7 +192,7 @@ const batchUpdateDocInputSchema = s.object(
   "Input for batch-updating a Tencent Docs document.",
   {
     fileID: nonEmptyString("The Tencent Docs document file ID."),
-    requests: s.array("The Tencent Docs document batch update requests.", looseRequestObjectSchema, {
+    requests: s.array("The Tencent Docs document batch update requests.", documentRequestBodySchema, {
       minItems: 1,
       maxItems: 30,
     }),

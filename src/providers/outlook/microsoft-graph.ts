@@ -74,12 +74,14 @@ function buildMicrosoftGraphUrl(
   query: Record<string, string | undefined> | undefined,
   allowNextLink: ((pathname: string) => boolean) | undefined,
 ): URL {
-  const absolute = /^https?:\/\//iu.test(pathOrUrl);
+  const normalizedPathOrUrl = pathOrUrl.toLowerCase();
+  const absolute = normalizedPathOrUrl.startsWith("https://") || normalizedPathOrUrl.startsWith("http://");
+  const requiresNextLinkValidation = absolute || pathOrUrl.startsWith("/");
   const url = absolute ? new URL(pathOrUrl) : new URL(pathOrUrl, graphBaseUrl);
   if (url.origin !== graphOrigin || url.protocol !== "https:") {
     throw new ProviderRequestError(400, "Microsoft Graph URL must target https://graph.microsoft.com");
   }
-  if (absolute && (!url.pathname.startsWith("/v1.0/") || !allowNextLink?.(url.pathname))) {
+  if (requiresNextLinkValidation && (!url.pathname.startsWith("/v1.0/") || !allowNextLink?.(url.pathname))) {
     throw new ProviderRequestError(400, "nextLink does not target an allowed Microsoft Graph endpoint");
   }
   setSearchParams(url, query ?? {});

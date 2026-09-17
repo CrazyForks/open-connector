@@ -1,7 +1,7 @@
 import type { TransitFileWriter } from "../../core/types.ts";
 
 import { compactObject } from "../../core/cast.ts";
-import { createProviderTimeout, ProviderRequestError, providerUserAgent } from "../provider-runtime.ts";
+import { runProviderRequest, ProviderRequestError, providerUserAgent } from "../provider-runtime.ts";
 import { createMarketDumpHandlers } from "./market-dumps.ts";
 
 type HithinkFinanceQueryValue = string | number | undefined;
@@ -609,9 +609,7 @@ async function hithinkFinanceGet(
     url.searchParams.set(key, String(value));
   }
 
-  const timeout = createProviderTimeout(signal);
-  let response: Response;
-  try {
+  const response = await runProviderRequest({ label: "Tonghuashun Financial Data", signal }, async (requestSignal) => {
     const upstreamResponse = await fetcher(url, {
       method: "GET",
       headers: {
@@ -620,31 +618,19 @@ async function hithinkFinanceGet(
         "x-api-key": apiKey,
       },
       redirect: "manual",
-      signal: timeout.signal,
+      signal: requestSignal,
     });
     await rejectOfficialApiRedirect(upstreamResponse);
     if (!upstreamResponse.body && !upstreamResponse.ok) {
       throw buildProviderError(upstreamResponse.status, undefined, {}, phase);
     }
-    response = await readBoundedResponse(
+    return readBoundedResponse(
       upstreamResponse,
       hithinkFinanceActionMaxResponseBytes,
       () => hithinkError("provider_error", "Tonghuashun Financial Data response is too large", 502),
       "Tonghuashun Financial Data returned an empty response",
     );
-  } catch (error) {
-    if (error instanceof ProviderRequestError) throw error;
-    if (timeout.didTimeout()) throw hithinkError("provider_error", "Tonghuashun Financial Data request timed out", 504);
-    throw hithinkError(
-      "provider_error",
-      error instanceof Error
-        ? `Tonghuashun Financial Data request failed: ${error.message}`
-        : "Tonghuashun Financial Data request failed",
-      502,
-    );
-  } finally {
-    timeout.cleanup();
-  }
+  });
 
   let payload: Record<string, unknown>;
   try {

@@ -67,7 +67,6 @@ const onlineMeetingProvider = s.stringEnum(["unknown", "skypeForBusiness", "skyp
 const eventFields = {
   subject: s.string("Event subject."),
   body: itemBody,
-  bodyPreview: s.string("Plain-text body preview."),
   start: dateTimeTimeZone,
   end: dateTimeTimeZone,
   location,
@@ -299,7 +298,9 @@ const actions: OutlookCalendarActionSource[] = [
     outlookCalendarSharedScopes,
     meetingTimeSuggestionsResult,
     input({
-      attendees: s.array(attendee, { minItems: 1, description: "People or resources invited to the meeting." }),
+      attendees: s.array(attendee, {
+        description: "People or resources invited to the meeting; an empty array checks only the organizer.",
+      }),
       locationConstraint: rawObject,
       timeConstraint: rawObject,
       meetingDuration: nonEmptyString("ISO 8601 duration, such as PT1H."),
@@ -384,7 +385,15 @@ function responseInput(allowNewTimeProposal: boolean): JsonSchema {
       },
     );
   }
-  return input(properties, ["eventId"]);
+  const schema = input(properties, ["eventId"]);
+  if (!allowNewTimeProposal) return schema;
+
+  schema.if = { required: ["proposedNewTime"] };
+  schema.then = {
+    properties: { sendResponse: { const: true } },
+    required: ["sendResponse"],
+  };
+  return schema;
 }
 
 function action(

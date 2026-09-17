@@ -939,7 +939,6 @@
       "src/providers/mailtrap/actions.ts": 1,
       "src/providers/more_trees/actions.ts": 1,
       "src/providers/nasa/actions.ts": 1,
-      "src/providers/netlify/actions.ts": 1,
       "src/providers/neutrino/actions.ts": 1,
       "src/providers/new_relic/actions.ts": 1,
       "src/providers/nylas/actions.ts": 1,

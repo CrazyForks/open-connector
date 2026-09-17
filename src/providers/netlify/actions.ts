@@ -5,29 +5,8 @@ import { defineProviderAction } from "../../core/provider-definition.ts";
 
 const service = "netlify";
 
-export type NetlifyActionName =
-  | "get_current_user"
-  | "list_accounts"
-  | "get_account"
-  | "list_sites"
-  | "get_site"
-  | "list_site_deploys"
-  | "get_deploy"
-  | "cancel_deploy"
-  | "lock_deploy"
-  | "unlock_deploy"
-  | "create_site_build"
-  | "create_site_deploy_from_zip_url"
-  | "upload_deploy_file_from_url"
-  | "upload_deploy_function_from_zip_url"
-  | "get_build"
-  | "notify_build_start"
-  | "list_site_forms"
-  | "list_submissions"
-  | "delete_submission";
-
 interface NetlifyActionSource {
-  name: NetlifyActionName;
+  name: string;
   description: string;
   requiredScopes: string[];
   inputSchema: JsonSchema;
@@ -54,6 +33,22 @@ const listSitesInputSchema = s.object(
     filter: s.stringEnum(["all", "owner", "guest"], { description: "Which Netlify sites to include in the result." }),
   },
   { description: "Input parameters for listing Netlify sites." },
+);
+
+const createSiteInputSchema = s.object(
+  "Input parameters for creating a Netlify site.",
+  {
+    name: s.nonEmptyString("The desired Netlify site name. Netlify generates one when omitted."),
+    accountId: s.nonEmptyString("The Netlify account ID that should own the site."),
+    customDomain: s.nonEmptyString("The custom domain to configure for the site."),
+    domainAliases: s.array("Additional domain aliases to configure for the site.", s.nonEmptyString("A domain alias.")),
+    notificationEmail: s.email("The email address that should receive site notifications."),
+    forceSsl: s.boolean("Whether Netlify should redirect HTTP requests to HTTPS."),
+    configureDns: s.boolean("Whether Netlify should automatically configure DNS for the custom domain."),
+  },
+  {
+    optional: ["name", "accountId", "customDomain", "domainAliases", "notificationEmail", "forceSsl", "configureDns"],
+  },
 );
 
 const siteInputSchema = s.object(
@@ -435,6 +430,14 @@ const actionSources: readonly NetlifyActionSource[] = [
     requiredScopes: [],
     inputSchema: listSitesInputSchema,
     outputSchema: sitesOutputSchema,
+  },
+  {
+    name: "create_site",
+    description:
+      "Create a Netlify site, optionally assigning its account, name, domains, notification email, and HTTPS settings.",
+    requiredScopes: [],
+    inputSchema: createSiteInputSchema,
+    outputSchema: siteOutputSchema,
   },
   {
     name: "get_site",

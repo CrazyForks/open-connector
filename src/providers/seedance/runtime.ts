@@ -237,7 +237,7 @@ export function normalizeSeedanceTask(payload: unknown, fallbackTaskId: string):
     createdAt: optionalInteger(record.created_at),
     updatedAt: optionalInteger(record.updated_at),
   };
-  if (status === "queued" || status === "running") {
+  if (status === "created" || status === "queued" || status === "running") {
     return { ...common, state: "processing", progress: optionalNumber(record.progress) };
   }
   if (status === "succeeded") {
