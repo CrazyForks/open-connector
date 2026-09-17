@@ -61,23 +61,23 @@ const mcpToolConfigs = {
   list_apps: {
     title: "List Apps",
     description: "List available provider apps with connection and action counts.",
-    inputSchema: {
+    inputSchema: z.object({
       query: z.string().optional().describe("Optional case-insensitive app name, service, category, or auth filter."),
-    },
+    }),
   },
   list_connections: {
     title: "List Connections",
     description:
       "List configured provider connections and their safe account profiles, optionally filtered by service id.",
-    inputSchema: {
+    inputSchema: z.object({
       service: z.string().optional().describe("Optional provider service id such as github, gmail, or notion."),
-    },
+    }),
   },
   search_actions: {
     title: "Search Actions",
     description:
       "Search catalog actions by query and optional provider service id. Use this before requesting an action guide.",
-    inputSchema: {
+    inputSchema: z.object({
       query: z
         .string()
         .optional()
@@ -87,29 +87,29 @@ const mcpToolConfigs = {
         .optional()
         .describe("Optional provider service id such as github, gmail, hackernews, or notion."),
       limit: z.number().int().min(1).max(50).default(20).describe("Maximum number of actions to return."),
-    },
+    }),
   },
   get_action_guide: {
     title: "Get Action Guide",
     description:
       "Return one action's compact markdown guide, including an execute_action example and input parameters.",
-    inputSchema: {
+    inputSchema: z.object({
       actionId: z.string().describe("Full action id, for example github.get_current_user."),
       connectionName: optionalConnectionNameSchema,
-    },
+    }),
   },
   execute_action: {
     title: "Execute Action",
     description:
       "Execute one local provider action by id with a JSON input object. Call get_action_guide first if the input shape is unclear.",
-    inputSchema: {
+    inputSchema: z.object({
       actionId: z.string().describe("Full action id, for example hackernews.get_item."),
       input: z
         .record(z.string(), z.unknown())
         .default({})
         .describe("Action input object matching the selected action guide."),
       connectionName: optionalConnectionNameSchema,
-    },
+    }),
   },
 };
 

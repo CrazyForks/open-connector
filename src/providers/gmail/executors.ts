@@ -7,12 +7,7 @@ import type {
 import type { ProviderActionHandlers } from "../provider-runtime.ts";
 import type { GmailDraftResource, GmailMessageResource, GmailThreadResource } from "./message.ts";
 
-import {
-  defineGoogleProviderExecutors,
-  googleBearerProxyAuth,
-  googleServiceAccountValidator,
-  resolveGoogleAccessToken,
-} from "../google-auth.ts";
+import { googleBearerProxyAuth, googleServiceAccountValidator, resolveGoogleAccessToken } from "../google-auth.ts";
 import {
   defineProviderExecutors,
   defineProviderProxy,

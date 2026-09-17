@@ -48,7 +48,7 @@ describe("Vercel team scope schemas", () => {
 
 describe("Vercel team scope", () => {
   it("rejects credential extra fields that set both teamId and slug", () => {
-    expect(() => readVercelTeamScope({ teamId: "team_123", slug: "acme" })).toThrowError(
+    expect(() => readVercelTeamScope({ teamId: "team_123", slug: "acme" })).toThrow(
       "teamId and slug cannot both be provided",
     );
   });
