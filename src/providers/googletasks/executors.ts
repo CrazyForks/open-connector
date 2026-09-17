@@ -10,8 +10,10 @@ import {
   pickOptionalInteger,
   pickOptionalString,
 } from "../../core/cast.ts";
+import { defineGoogleProviderExecutors, googleBearerProxyAuth, googleServiceAccountValidator } from "../google-auth.ts";
 import { googleJsonRequest, googleRequest } from "../google-runtime.ts";
-import { defineOAuthProviderExecutors, defineProviderProxy, ProviderRequestError } from "../provider-runtime.ts";
+import { defineProviderProxy, ProviderRequestError } from "../provider-runtime.ts";
+import { googleTasksOAuthScopes } from "./scopes.ts";
 
 export const googleTasksApiBaseUrl = "https://tasks.googleapis.com/tasks/v1";
 
@@ -121,12 +123,14 @@ export const googleTasksActionHandlers: ProviderActionHandlers<"googletasks", Go
   clear_tasks: clearTasks,
 };
 
-export const executors: ProviderExecutors = defineOAuthProviderExecutors(service, googleTasksActionHandlers);
+export const executors: ProviderExecutors = defineGoogleProviderExecutors(service, googleTasksActionHandlers, {
+  scopes: googleTasksOAuthScopes,
+});
 
 export const proxy: ProviderProxyExecutor = defineProviderProxy({
   service,
   baseUrl: googleTasksApiBaseUrl,
-  auth: { type: "oauth_bearer" },
+  auth: googleBearerProxyAuth(googleTasksOAuthScopes),
   skipDnsValidation: true,
 });
 
@@ -151,6 +155,7 @@ export const credentialValidators: CredentialValidators = {
       },
     };
   },
+  customCredential: googleServiceAccountValidator(service, googleTasksOAuthScopes),
 };
 
 async function listTaskLists(input: Record<string, unknown>, context: GoogleTasksRuntimeContext) {

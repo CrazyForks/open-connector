@@ -3,13 +3,10 @@ import type { ProviderActionHandlers } from "../provider-runtime.ts";
 import type { OAuthProviderContext } from "../provider-runtime.ts";
 
 import { compactObject, objectArray, optionalInteger, optionalRecord, optionalString } from "../../core/cast.ts";
+import { defineGoogleProviderExecutors, googleBearerProxyAuth, googleServiceAccountValidator } from "../google-auth.ts";
 import { googleJsonRequest } from "../google-runtime.ts";
-import {
-  defineOAuthProviderExecutors,
-  defineProviderProxy,
-  providerInputError,
-  ProviderRequestError,
-} from "../provider-runtime.ts";
+import { defineProviderProxy, providerInputError, ProviderRequestError } from "../provider-runtime.ts";
+import { googleSlidesOAuthScopes } from "./scopes.ts";
 
 export const slidesApiBaseUrl = "https://slides.googleapis.com/v1";
 export const googleDriveApiBaseUrl = "https://www.googleapis.com/drive/v3";
@@ -62,7 +59,9 @@ export const googleSlidesActionHandlers: ProviderActionHandlers<"googleslides", 
   presentations_copy_from_template: copyPresentationFromTemplate,
 };
 
-export const executors: ProviderExecutors = defineOAuthProviderExecutors(service, googleSlidesActionHandlers);
+export const executors: ProviderExecutors = defineGoogleProviderExecutors(service, googleSlidesActionHandlers, {
+  scopes: googleSlidesOAuthScopes,
+});
 
 export const credentialValidators: CredentialValidators = {
   async oauth2(input, { fetcher, signal }) {
@@ -85,6 +84,7 @@ export const credentialValidators: CredentialValidators = {
       },
     };
   },
+  customCredential: googleServiceAccountValidator(service, googleSlidesOAuthScopes),
 };
 
 async function createPresentation(input: Record<string, unknown>, context: GoogleSlidesRuntimeContext) {
@@ -354,5 +354,5 @@ function requireString(value: string | undefined, message: string): string {
 export const proxy: ProviderProxyExecutor = defineProviderProxy({
   service,
   baseUrl: "https://slides.googleapis.com/v1",
-  auth: { type: "oauth_bearer" },
+  auth: googleBearerProxyAuth(googleSlidesOAuthScopes),
 });

@@ -5,12 +5,7 @@ import type { OAuthProviderContext } from "../provider-runtime.ts";
 import { randomUUID } from "node:crypto";
 import { requiredRawString, requiredString } from "../../core/cast.ts";
 import { readBoundedResponseBytes } from "../../core/request.ts";
-import {
-  createGoogleServiceAccountToken,
-  defineGoogleProviderExecutors,
-  googleBearerProxyAuth,
-  readGoogleServiceAccountCredential,
-} from "../google-auth.ts";
+import { defineGoogleProviderExecutors, googleBearerProxyAuth, googleServiceAccountValidator } from "../google-auth.ts";
 import { googleJsonRequest, googleRequest } from "../google-runtime.ts";
 import {
   defineProviderProxy,
@@ -262,25 +257,7 @@ export const credentialValidators: CredentialValidators = {
       },
     };
   },
-  async customCredential(input, { fetcher, signal }) {
-    const serviceAccount = readGoogleServiceAccountCredential(input.values);
-    const token = await createGoogleServiceAccountToken({
-      service,
-      serviceAccount,
-      scopes: googledriveOAuthScopes,
-      fetcher,
-      signal,
-    });
-    return {
-      profile: {
-        accountId: serviceAccount.subject ?? serviceAccount.clientEmail,
-        displayName: serviceAccount.subject
-          ? `${serviceAccount.subject} (impersonated by ${serviceAccount.clientEmail})`
-          : serviceAccount.clientEmail,
-        grantedScopes: token.grantedScopes,
-      },
-    };
-  },
+  customCredential: googleServiceAccountValidator(service, googledriveOAuthScopes),
 };
 
 async function createDrive(input: Record<string, unknown>, accessToken: string, fetcher: typeof fetch) {

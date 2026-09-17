@@ -10,13 +10,10 @@ import {
   optionalRecord,
   optionalString,
 } from "../../core/cast.ts";
+import { defineGoogleProviderExecutors, googleBearerProxyAuth, googleServiceAccountValidator } from "../google-auth.ts";
 import { googleJsonRequest } from "../google-runtime.ts";
-import {
-  defineOAuthProviderExecutors,
-  defineProviderProxy,
-  providerInputError,
-  ProviderRequestError,
-} from "../provider-runtime.ts";
+import { defineProviderProxy, providerInputError, ProviderRequestError } from "../provider-runtime.ts";
+import { googleFormsOAuthScopes } from "./scopes.ts";
 
 export const googleFormsApiBaseUrl = "https://forms.googleapis.com/v1/forms";
 
@@ -92,12 +89,14 @@ export const googleFormsActionHandlers: ProviderActionHandlers<"googleforms", Go
   list_watches: listWatches,
 };
 
-export const executors: ProviderExecutors = defineOAuthProviderExecutors(service, googleFormsActionHandlers);
+export const executors: ProviderExecutors = defineGoogleProviderExecutors(service, googleFormsActionHandlers, {
+  scopes: googleFormsOAuthScopes,
+});
 
 export const proxy: ProviderProxyExecutor = defineProviderProxy({
   service,
   baseUrl: googleFormsApiBaseUrl,
-  auth: { type: "oauth_bearer" },
+  auth: googleBearerProxyAuth(googleFormsOAuthScopes),
   skipDnsValidation: true,
 });
 
@@ -122,6 +121,7 @@ export const credentialValidators: CredentialValidators = {
       },
     };
   },
+  customCredential: googleServiceAccountValidator(service, googleFormsOAuthScopes),
 };
 
 async function createForm(input: Record<string, unknown>, context: GoogleFormsRuntimeContext) {

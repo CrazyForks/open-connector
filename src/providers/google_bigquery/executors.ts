@@ -9,8 +9,10 @@ import {
   optionalInteger as asOptionalInteger,
   requiredRecord,
 } from "../../core/cast.ts";
+import { defineGoogleProviderExecutors, googleBearerProxyAuth, googleServiceAccountValidator } from "../google-auth.ts";
 import { googleJsonRequest, googleRequest } from "../google-runtime.ts";
-import { defineOAuthProviderExecutors, defineProviderProxy, ProviderRequestError } from "../provider-runtime.ts";
+import { defineProviderProxy, ProviderRequestError } from "../provider-runtime.ts";
+import { googleBigQueryOAuthScopes } from "./scopes.ts";
 
 const bigQueryApiBaseUrl = "https://bigquery.googleapis.com/bigquery/v2";
 
@@ -56,15 +58,18 @@ export const googleBigQueryActionHandlers: ProviderActionHandlers<"google_bigque
   delete_model: deleteModel,
 };
 
-export const executors: ProviderExecutors = defineOAuthProviderExecutors(
+export const executors: ProviderExecutors = defineGoogleProviderExecutors(
   "google_bigquery",
   googleBigQueryActionHandlers,
+  {
+    scopes: googleBigQueryOAuthScopes,
+  },
 );
 
 export const proxy: ProviderProxyExecutor = defineProviderProxy({
   service: "google_bigquery",
   baseUrl: bigQueryApiBaseUrl,
-  auth: { type: "oauth_bearer" },
+  auth: googleBearerProxyAuth(googleBigQueryOAuthScopes),
   skipDnsValidation: true,
 });
 
@@ -88,6 +93,7 @@ export const credentialValidators: CredentialValidators = {
       },
     };
   },
+  customCredential: googleServiceAccountValidator("google_bigquery", googleBigQueryOAuthScopes),
 };
 
 async function listProjects(input: Record<string, unknown>, context: GoogleBigQueryRuntimeDeps) {

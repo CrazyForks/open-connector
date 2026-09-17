@@ -1,4 +1,4 @@
-import type { ProviderExecutors, ResolvedCredential } from "../core/types.ts";
+import type { CredentialValidators, ProviderExecutors, ResolvedCredential } from "../core/types.ts";
 import type {
   OAuthProviderContext,
   ProviderFetch,
@@ -286,5 +286,30 @@ export function googleBearerProxyAuth(scopes: readonly string[]): ProviderProxyA
       });
       return { accessToken: resolved.accessToken, tokenType: resolved.tokenType };
     },
+  };
+}
+
+/**
+ * The `customCredential` validator for Google providers: mint a service account
+ * token to prove the key works and report the service account identity — or the
+ * impersonated user, when domain-wide delegation is configured — as the
+ * connection profile.
+ */
+export function googleServiceAccountValidator(
+  service: string,
+  scopes: readonly string[],
+): NonNullable<CredentialValidators["customCredential"]> {
+  return async (input, { fetcher, signal }) => {
+    const serviceAccount = readGoogleServiceAccountCredential(input.values);
+    const token = await createGoogleServiceAccountToken({ service, serviceAccount, scopes, fetcher, signal });
+    return {
+      profile: {
+        accountId: serviceAccount.subject ?? serviceAccount.clientEmail,
+        displayName: serviceAccount.subject
+          ? `${serviceAccount.subject} (impersonated by ${serviceAccount.clientEmail})`
+          : serviceAccount.clientEmail,
+        grantedScopes: token.grantedScopes,
+      },
+    };
   };
 }

@@ -2,12 +2,7 @@ import type { CredentialValidators, ProviderExecutors, ProviderProxyExecutor } f
 import type { ProviderActionHandlers } from "../provider-runtime.ts";
 import type { OAuthProviderContext } from "../provider-runtime.ts";
 
-import {
-  createGoogleServiceAccountToken,
-  defineGoogleProviderExecutors,
-  googleBearerProxyAuth,
-  readGoogleServiceAccountCredential,
-} from "../google-auth.ts";
+import { defineGoogleProviderExecutors, googleBearerProxyAuth, googleServiceAccountValidator } from "../google-auth.ts";
 import { defineProviderProxy } from "../provider-runtime.ts";
 import {
   addSheet,
@@ -216,25 +211,7 @@ export const credentialValidators: CredentialValidators = {
       },
     };
   },
-  async customCredential(input, { fetcher, signal }) {
-    const serviceAccount = readGoogleServiceAccountCredential(input.values);
-    const token = await createGoogleServiceAccountToken({
-      service,
-      serviceAccount,
-      scopes: googlesheetsOAuthScopes,
-      fetcher,
-      signal,
-    });
-    return {
-      profile: {
-        accountId: serviceAccount.subject ?? serviceAccount.clientEmail,
-        displayName: serviceAccount.subject
-          ? `${serviceAccount.subject} (impersonated by ${serviceAccount.clientEmail})`
-          : serviceAccount.clientEmail,
-        grantedScopes: token.grantedScopes,
-      },
-    };
-  },
+  customCredential: googleServiceAccountValidator(service, googlesheetsOAuthScopes),
 };
 
 export const proxy: ProviderProxyExecutor = defineProviderProxy({

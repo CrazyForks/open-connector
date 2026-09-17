@@ -10,8 +10,10 @@ import {
   pickOptionalInteger,
   pickOptionalString as pickNonEmptyString,
 } from "../../core/cast.ts";
+import { defineGoogleProviderExecutors, googleBearerProxyAuth, googleServiceAccountValidator } from "../google-auth.ts";
 import { googleJsonRequest, googleRequest } from "../google-runtime.ts";
-import { defineOAuthProviderExecutors, defineProviderProxy, ProviderRequestError } from "../provider-runtime.ts";
+import { defineProviderProxy, ProviderRequestError } from "../provider-runtime.ts";
+import { googleSearchConsoleOAuthScopes } from "./scopes.ts";
 
 const service = "google_search_console";
 
@@ -73,7 +75,9 @@ export const googleSearchConsoleActionHandlers: ProviderActionHandlers<"google_s
   },
 };
 
-export const executors: ProviderExecutors = defineOAuthProviderExecutors(service, googleSearchConsoleActionHandlers);
+export const executors: ProviderExecutors = defineGoogleProviderExecutors(service, googleSearchConsoleActionHandlers, {
+  scopes: googleSearchConsoleOAuthScopes,
+});
 
 export const credentialValidators: CredentialValidators = {
   async oauth2(input, { fetcher }) {
@@ -95,6 +99,7 @@ export const credentialValidators: CredentialValidators = {
       },
     };
   },
+  customCredential: googleServiceAccountValidator(service, googleSearchConsoleOAuthScopes),
 };
 
 async function listSites(_input: Record<string, unknown>, { accessToken, fetcher }: RuntimeDeps) {
@@ -402,5 +407,5 @@ async function urlInspectionJsonRequest<T>(
 export const proxy: ProviderProxyExecutor = defineProviderProxy({
   service,
   baseUrl: "https://www.googleapis.com/webmasters/v3",
-  auth: { type: "oauth_bearer" },
+  auth: googleBearerProxyAuth(googleSearchConsoleOAuthScopes),
 });

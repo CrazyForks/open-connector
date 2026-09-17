@@ -8,11 +8,16 @@ import type { ProviderActionHandlers } from "../provider-runtime.ts";
 import type { GmailDraftResource, GmailMessageResource, GmailThreadResource } from "./message.ts";
 
 import {
+  defineGoogleProviderExecutors,
+  googleBearerProxyAuth,
+  googleServiceAccountValidator,
+  resolveGoogleAccessToken,
+} from "../google-auth.ts";
+import {
   defineProviderExecutors,
   defineProviderProxy,
   ProviderRequestError,
   readProviderJsonBody,
-  requireOAuthCredential,
 } from "../provider-runtime.ts";
 import {
   buildRecipients,
@@ -27,6 +32,7 @@ import {
   resolveReplyHeaders,
   summarizeGmailMessage,
 } from "./message.ts";
+import { gmailOAuthScopes } from "./scopes.ts";
 
 const service = "gmail";
 const gmailApiBaseUrl = "https://gmail.googleapis.com/gmail/v1";
@@ -204,15 +210,21 @@ export const executors: ProviderExecutors = defineProviderExecutors<ActionContex
   service,
   handlers: gmailActionHandlers,
   async createContext(context: ExecutionContext, fetcher: typeof fetch): Promise<ActionContext> {
-    const credential = await requireOAuthCredential(context, service);
-    return { userId: "me", accessToken: credential.accessToken, fetcher };
+    const resolved = await resolveGoogleAccessToken({
+      service,
+      scopes: gmailOAuthScopes,
+      credential: await context.getCredential(service),
+      fetcher,
+      signal: context.signal,
+    });
+    return { userId: "me", accessToken: resolved.accessToken, fetcher };
   },
 });
 
 export const proxy: ProviderProxyExecutor = defineProviderProxy({
   service,
   baseUrl: gmailApiBaseUrl,
-  auth: { type: "oauth_bearer" },
+  auth: googleBearerProxyAuth(gmailOAuthScopes),
 });
 
 export const credentialValidators: CredentialValidators = {
@@ -225,6 +237,7 @@ export const credentialValidators: CredentialValidators = {
       },
     };
   },
+  customCredential: googleServiceAccountValidator(service, gmailOAuthScopes),
 };
 
 async function fetchEmails(input: Record<string, unknown>, userId: string, accessToken: string, fetcher: typeof fetch) {
