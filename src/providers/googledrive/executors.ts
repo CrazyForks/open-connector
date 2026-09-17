@@ -234,15 +234,15 @@ export const executors: ProviderExecutors = defineOAuthProviderExecutors(service
 export const credentialValidators: CredentialValidators = {
   async oauth2(input, { fetcher, signal }) {
     const profile = await googleJsonRequest<{
-      emailAddress?: string;
       user?: { emailAddress?: string; displayName?: string };
     }>(`${driveApiBaseUrl}/about`, {
       accessToken: input.accessToken,
       fetcher,
       signal,
-      query: { fields: "user,emailAddress" },
+      // About has no top-level `emailAddress`, and Drive rejects the whole selection when any listed field is unknown.
+      query: { fields: "user" },
     });
-    const emailAddress = profile.user?.emailAddress ?? profile.emailAddress;
+    const emailAddress = profile.user?.emailAddress;
     const displayName = profile.user?.displayName ?? emailAddress;
     return {
       profile: {

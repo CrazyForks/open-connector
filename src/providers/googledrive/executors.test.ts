@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeAction } from "../../core/execution.ts";
 import { setDefaultGuardedFetchDnsLookup } from "../../core/guarded-fetch.ts";
 import { provider } from "./definition.ts";
-import { executors } from "./executors.ts";
+import { credentialValidators, executors } from "./executors.ts";
 
 interface CapturedRequest {
   url: URL;
@@ -180,6 +180,40 @@ describe("Google Drive files.get", () => {
       },
     });
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("Google Drive OAuth credential validation", () => {
+  it("requests only the About user field and uses its email address as the account id", async () => {
+    const requests: CapturedRequest[] = [];
+
+    const result = await credentialValidators.oauth2!(oauthCredential, {
+      fetcher: async (input, init) => {
+        requests.push({
+          url: new URL(String(input)),
+          authorization: new Headers(init?.headers).get("authorization"),
+        });
+        return Response.json({ user: { emailAddress: "someone@example.com", displayName: "Someone" } });
+      },
+    });
+
+    expect(result).toMatchObject({
+      profile: { accountId: "someone@example.com", displayName: "Someone" },
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.url.pathname).toBe("/drive/v3/about");
+    expect(Object.fromEntries(requests[0]!.url.searchParams)).toEqual({ fields: "user" });
+    expect(requests[0]?.authorization).toBe("Bearer drive-access-token");
+  });
+
+  it("falls back to the generic account id when the About user has no email address", async () => {
+    const result = await credentialValidators.oauth2!(oauthCredential, {
+      fetcher: async () => Response.json({ user: { displayName: "No Mail" } }),
+    });
+
+    expect(result).toMatchObject({
+      profile: { accountId: "googledrive:oauth2", displayName: "No Mail" },
+    });
   });
 });
 
