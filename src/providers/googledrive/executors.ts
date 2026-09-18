@@ -77,6 +77,17 @@ const driveFileFields = [
   "shared",
   "starred",
   "trashed",
+  // Whether THIS caller may manage the file's sharing, computed per-user by
+  // Drive itself. A consumer that mirrors a file's access list needs to know
+  // this before it tries: `permissions.list` answers 403 wherever the caller
+  // holds no sharing right, and without the projection the only way to find
+  // out is to make the call on every file and read the failures.
+  //
+  // Projected narrowly rather than as the whole `capabilities` object, which
+  // carries ~35 booleans this provider has no use for. Drive returns exactly
+  // the requested members, so the shape is `{ canShare }`.
+  "ownedByMe",
+  "capabilities(canShare)",
 ].join(",");
 const driveFields = [
   "id",
@@ -821,6 +832,13 @@ function normalizeDriveFile(payload: Record<string, unknown>) {
     ...(typeof payload.shared === "boolean" ? { shared: payload.shared } : {}),
     ...(typeof payload.starred === "boolean" ? { starred: payload.starred } : {}),
     ...(typeof payload.trashed === "boolean" ? { trashed: payload.trashed } : {}),
+    ...(typeof payload.ownedByMe === "boolean" ? { ownedByMe: payload.ownedByMe } : {}),
+    // Present only when Drive answered it. Omitted rather than defaulted to
+    // `false`, because "Drive did not say" and "the caller may not share" lead
+    // a consumer to opposite actions, and a default would make them the same.
+    ...(typeof asOptionalObject(payload.capabilities)?.canShare === "boolean"
+      ? { capabilities: { canShare: asOptionalObject(payload.capabilities)!.canShare as boolean } }
+      : {}),
   };
 }
 
