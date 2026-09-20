@@ -313,6 +313,8 @@ export class OAuthFlowService {
           Object.keys(refreshParameters).length > 0 ? { oauthRefreshParameters: refreshParameters } : undefined,
         metadata: {
           ...tokenResponse.metadata,
+          // Bind the stored credential to the callback that completed this consent.
+          oauthAuthorizationId: pending.state,
           oauthClientId: config.clientId,
           oauthClientExtra: config.extra,
           oauthClientSecretExtra: config.secretExtra,

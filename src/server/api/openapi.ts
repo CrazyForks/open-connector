@@ -540,6 +540,9 @@ export function createOpenApiDocument(
             service: jsonSchema.string({ description: "Provider service identifier." }),
             authType: jsonSchema.string({ description: "Connection authentication type." }),
             configured: jsonSchema.boolean({ description: "Whether the provider is connected." }),
+            oauthAuthorizationId: jsonSchema.string({
+              description: "Completed OAuth consent state. Omitted for legacy and non-OAuth connections.",
+            }),
             virtual: jsonSchema.boolean({
               description: "Whether the connection needs no stored secret.",
             }),

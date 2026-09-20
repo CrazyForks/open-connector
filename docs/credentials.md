@@ -77,6 +77,11 @@ The runtime exposes this profile in `/api/connections`, MCP action discovery, ac
 and recent run logs. Agents should use it to understand which account an action will run as; raw
 provider tokens are never exposed.
 
+An OAuth connection also carries `oauthAuthorizationId` in `/api/connections`: the `state` of the
+callback that completed its consent. It changes only when a new consent completes, never on token
+refresh, so a caller can tell a fresh grant from the credential it replaced. Connections made
+before this field existed omit it.
+
 Check current connections:
 
 ```bash

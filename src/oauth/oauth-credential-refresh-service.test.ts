@@ -44,6 +44,69 @@ describe("OAuthCredentialRefreshService", () => {
     vi.restoreAllMocks();
   });
 
+  // A refresh rotates tokens INSIDE an existing authorization — it is not a
+  // new consent — so the provenance has to survive it.
+  //
+  // The case that matters is a provider runtime returning its OWN `metadata`:
+  // that spreads over `...credential.metadata`, so without carrying the field
+  // forward explicitly the connection loses its provenance on first refresh,
+  // hours after the consent it describes. A stub that returns no metadata
+  // passes either way and proves nothing, so this one returns a conflicting
+  // value and asserts the stored one wins.
+  it("keeps the stored provenance when a provider runtime returns its own", async () => {
+    const providerLoader = new ProviderLoader({
+      example: async () => ({
+        executors: {},
+        oauth: {
+          async refreshAccessToken() {
+            return {
+              accessToken: "provider-refreshed-token",
+              tokenType: "Bearer",
+              expiresAt: "2026-12-29T00:00:00.000Z",
+              metadata: { oauthAuthorizationId: "runtime-supplied", refreshedBy: "provider-runtime" },
+            };
+          },
+        },
+      }),
+    });
+
+    const refreshed = await new OAuthCredentialRefreshService(clientConfigs, providerLoader).refresh(
+      "example",
+      expiredCredential({ oauthAuthorizationId: "completed-authorization", expires_in: 3600 }),
+    );
+
+    expect(refreshed.metadata.oauthAuthorizationId).toBe("completed-authorization");
+    expect(refreshed.metadata.refreshedBy).toBe("provider-runtime");
+  });
+
+  // Legacy absence stays absence, under the same pressure: a connection made
+  // before provenance existed must not acquire one at refresh time, which
+  // would claim a consent nobody recorded.
+  it("does not let a refresh invent provenance for a credential that has none", async () => {
+    const providerLoader = new ProviderLoader({
+      example: async () => ({
+        executors: {},
+        oauth: {
+          async refreshAccessToken() {
+            return {
+              accessToken: "provider-refreshed-token",
+              tokenType: "Bearer",
+              expiresAt: "2026-12-29T00:00:00.000Z",
+              metadata: { oauthAuthorizationId: "runtime-supplied" },
+            };
+          },
+        },
+      }),
+    });
+
+    const refreshed = await new OAuthCredentialRefreshService(clientConfigs, providerLoader).refresh(
+      "example",
+      expiredCredential({ expires_in: 3600 }),
+    );
+
+    expect(refreshed.metadata.oauthAuthorizationId).toBeUndefined();
+  });
+
   it("keeps an expiry when the refresh response omits expires_in", async () => {
     const now = Date.now();
     vi.spyOn(Date, "now").mockReturnValue(now);

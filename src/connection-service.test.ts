@@ -593,6 +593,77 @@ describe("ConnectionService", () => {
     await expect(service.listConnections()).resolves.toEqual([]);
   });
 
+  // Credential metadata also holds client secrets and provider-private data.
+  // The summary is a public shape, so this asserts the WHOLE object rather
+  // than the one new key: a test that only checks `oauthAuthorizationId` is
+  // present would pass just as happily if a client secret leaked beside it.
+  it("exposes only the OAuth provenance out of internal credential metadata", async () => {
+    const service = createService([oauthProvider]);
+    const summary = await service.setOAuthCredential(
+      "example",
+      {
+        authType: "oauth2",
+        accessToken: "test-access-token",
+        refreshToken: "test-refresh-token",
+        tokenType: "Bearer",
+        profile: testProfile,
+        metadata: {
+          oauthAuthorizationId: "completed-authorization",
+          oauthClientConfig: { clientId: "test-client", clientSecret: "test-client-secret" },
+          oauthClientSecretExtra: { appBearerToken: "test-app-token" },
+          providerData: "internal-only",
+        },
+      },
+      "work",
+    );
+    const expected = {
+      id: summary.id,
+      service: "example",
+      connectionName: "work",
+      authType: "oauth2",
+      configured: true,
+      virtual: false,
+      default: false,
+      profile: testProfile,
+      oauthAuthorizationId: "completed-authorization",
+    };
+
+    // Every way a caller can reach a summary, because they are separate code
+    // paths and a field added to one is not added to the others.
+    expect(JSON.parse(JSON.stringify(summary))).toEqual(expected);
+    expect(await service.getConnectionSummary("example", "work")).toEqual(expected);
+    expect(await service.listConnections()).toEqual([expected]);
+    expect(await service.listConnectionsByService("example")).toEqual([expected]);
+    expect((await service.resolveForExecution("example", "work")).summary).toEqual(expected);
+  });
+
+  // Absent, not null or empty: a connection made before this existed has no
+  // provenance, and "" would read as one. The validator case is the same
+  // assertion from the other side — provenance is minted by the callback that
+  // completed consent, so a provider validator must not be able to supply it.
+  it.each([undefined, null, 42, { nested: "not-a-string" }])(
+    "omits legacy or non-string provenance, and refuses validator-supplied provenance (%#)",
+    async (oauthAuthorizationId) => {
+      const service = createService([oauthProvider], {
+        providerLoader: new FakeProviderLoader({
+          async oauth2() {
+            return { profile: testProfile, metadata: { oauthAuthorizationId: "validator-supplied-id" } };
+          },
+        }),
+      });
+      const summary = await service.setOAuthCredential("example", {
+        authType: "oauth2",
+        accessToken: "access-token",
+        tokenType: "Bearer",
+        profile: testProfile,
+        metadata: { oauthAuthorizationId },
+      });
+
+      expect(summary).not.toHaveProperty("oauthAuthorizationId");
+      expect(await service.getConnectionSummary("example")).not.toHaveProperty("oauthAuthorizationId");
+    },
+  );
+
   it("preserves the existing OAuth connection when reconnect validation fails", async () => {
     const validate = vi.fn().mockResolvedValue({ profile: testProfile });
     const service = createService([oauthProvider], {

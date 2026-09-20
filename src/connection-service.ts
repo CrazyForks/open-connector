@@ -34,6 +34,8 @@ export interface ConnectionSummary {
   virtual: boolean;
   default: boolean;
   profile: CredentialProfile;
+  /** Completed OAuth consent state; absent for legacy and non-OAuth connections. */
+  oauthAuthorizationId?: string;
   marketplace?: { id: string; pricing: MarketplacePricing };
 }
 
@@ -507,7 +509,7 @@ export class ConnectionService {
     connectionName: string,
     credential: Exclude<ResolvedCredential, { authType: "no_auth" }>,
   ): ConnectionSummary {
-    return {
+    const summary: ConnectionSummary = {
       id,
       service: provider.service,
       connectionName,
@@ -517,6 +519,11 @@ export class ConnectionService {
       default: connectionName === defaultConnectionName,
       profile: credential.profile,
     };
+    // Credential metadata also contains client secrets. Expose only this runtime-owned string.
+    if (credential.authType === "oauth2" && typeof credential.metadata.oauthAuthorizationId === "string") {
+      summary.oauthAuthorizationId = credential.metadata.oauthAuthorizationId;
+    }
+    return summary;
   }
 
   private createNoAuthConnectionSummary(provider: ProviderDefinition, connectionName: string): ConnectionSummary {
@@ -782,6 +789,8 @@ export class ConnectionService {
       metadata: {
         ...credential.metadata,
         ...(validation.metadata ?? {}),
+        // Provider validation cannot replace or invent completed consent provenance.
+        oauthAuthorizationId: credential.metadata.oauthAuthorizationId,
       },
     };
   }

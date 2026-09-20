@@ -83,6 +83,8 @@ export class OAuthCredentialRefreshService implements IOAuthCredentialRefresher 
       metadata: {
         ...credential.metadata,
         ...refreshed.metadata,
+        // Refresh rotates tokens within the existing authorization, including legacy absence.
+        oauthAuthorizationId: credential.metadata.oauthAuthorizationId,
         expires_in: expiresIn,
         refreshedAt: new Date().toISOString(),
       },

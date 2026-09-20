@@ -773,6 +773,36 @@ describe("OAuthFlowService", () => {
     );
   });
 
+  // The state is the one value that identifies the callback which completed
+  // this consent, and it is the reason the field can be trusted: it is minted
+  // here, not accepted from a provider or a validator. Asserting it equals
+  // `started.state` rather than merely "is a string" is the point — a random
+  // id would satisfy the weaker check and tie the credential to nothing.
+  it("binds a completed credential to the callback that authorized it", async () => {
+    const services = createServices([pkceOAuthProvider]);
+    await services.clientConfigs.upsertConfig({
+      service: "pkce",
+      clientId: "client-id",
+      clientSecret: "client-secret",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ access_token: "access-token", token_type: "Bearer" })),
+    );
+
+    const started = await services.flow.startAuthorization({ service: "pkce" });
+    await services.flow.completeAuthorization({ state: started.state, code: "code" });
+
+    await expect(services.connections.getCredential("pkce")).resolves.toMatchObject({
+      authType: "oauth2",
+      metadata: { oauthAuthorizationId: started.state },
+    });
+    // And it reaches the public summary, which is where a caller reads it.
+    await expect(services.connections.getConnectionSummary("pkce")).resolves.toMatchObject({
+      oauthAuthorizationId: started.state,
+    });
+  });
+
   it("stores secret OAuth client config fields in completed credential metadata", async () => {
     const services = createServices([pkceOAuthProvider]);
     await services.clientConfigs.upsertConfig({
