@@ -85,6 +85,15 @@ const actionMethodByName: ProviderActionSources<"xiaohongshu_store", string> = {
   list_categories: "common.getCategories",
   get_category_attributes: "common.getAttributeLists",
   list_express_companies: "common.getExpressCompanyList",
+  list_item_skus: "product.getDetailSkuList",
+  create_item: "product.createItemAndSku",
+  update_item: "product.updateItemAndSku",
+  upload_material: "material.uploadMaterial",
+  list_materials: "material.queryMaterial",
+  search_brands: "common.brandSearch",
+  list_carriage_templates: "common.getCarriageTemplateList",
+  list_logistics_plans: "common.getLogisticsList",
+  list_address_records: "common.getAddressRecord",
 };
 
 const handlers = mapProviderActionSources(
@@ -217,8 +226,14 @@ async function requestXiaohongshuStore(input: XiaohongshuStoreRequestInput): Pro
 
 function isXiaohongshuStoreSuccess(payload: Record<string, unknown>): boolean {
   if (payload.success === false) return false;
-  if (payload.success === true) return true;
-  return (optionalInteger(payload.error_code) ?? optionalInteger(payload.errorCode)) === 0;
+  const errorCode = optionalInteger(payload.error_code) ?? optionalInteger(payload.errorCode);
+  // The item publish APIs report some business rejections as { success: true, error_code: 50209,
+  // error_msg: "..." } with no data; without this check the message would be lost behind a generic
+  // "invalid item" response error.
+  if (payload.success === true) {
+    return payload.data != null || errorCode === undefined || errorCode === 0;
+  }
+  return errorCode === 0;
 }
 
 // The newer after-sale APIs wrap their payload in a second { code, msg, success, data }
@@ -464,6 +479,61 @@ function buildActionParameters(
     }
     case "adjust_sku_stock":
       return { skuId: requiredInputString(input.skuId, "skuId"), qty: integer(input.qty, "qty", providerInputError) };
+    case "list_item_skus":
+      return compactObject({
+        id: optionalString(input.id),
+        createTimeFrom: optionalInteger(input.createTimeFrom),
+        createTimeTo: optionalInteger(input.createTimeTo),
+        updateTimeFrom: optionalInteger(input.updateTimeFrom),
+        updateTimeTo: optionalInteger(input.updateTimeTo),
+        buyable: optionalBoolean(input.buyable),
+        stockGte: optionalInteger(input.stockGte),
+        stockLte: optionalInteger(input.stockLte),
+        barcode: optionalString(input.barcode),
+        scSkucode: optionalString(input.scSkucode),
+        singlePackOnly: optionalBoolean(input.singlePackOnly),
+        lastId: optionalString(input.lastId),
+        isChannel: optionalBoolean(input.isChannel),
+        pageNo: optionalInteger(input.pageNo) ?? 1,
+        pageSize: optionalInteger(input.pageSize) ?? 50,
+      });
+    case "create_item":
+      return buildItemParameters(input, false);
+    case "update_item":
+      return buildItemParameters(input, true);
+    case "upload_material":
+      return {
+        name: requiredInputString(input.name, "name"),
+        type: requiredInputString(input.type, "type"),
+        materialContent: requiredInputString(input.contentBase64, "contentBase64"),
+      };
+    case "list_materials":
+      return compactObject({
+        materialId: optionalString(input.materialId),
+        name: optionalString(input.name),
+        type: optionalString(input.type),
+        status: optionalInteger(input.status),
+        createTimeFrom: optionalInteger(input.createTimeFrom),
+        createTimeTo: optionalInteger(input.createTimeTo),
+        ascByCreateTime: optionalBoolean(input.ascByCreateTime),
+        pageNo: optionalInteger(input.pageNo) ?? 1,
+        pageSize: optionalInteger(input.pageSize) ?? 50,
+      });
+    case "search_brands":
+      return {
+        categoryId: requiredInputString(input.categoryId, "categoryId"),
+        keyword: optionalString(input.keyword),
+        pageNo: optionalInteger(input.pageNo) ?? 1,
+        pageSize: optionalInteger(input.pageSize) ?? 20,
+      };
+    case "list_carriage_templates":
+    case "list_address_records":
+      return {
+        pageIndex: optionalInteger(input.pageIndex) ?? 1,
+        pageSize: optionalInteger(input.pageSize) ?? 20,
+      };
+    case "list_logistics_plans":
+      return {};
     case "list_categories":
       return compactObject({ categoryId: optionalString(input.categoryId) });
     case "get_category_attributes":
@@ -560,6 +630,42 @@ function normalizeActionOutput(
     case "adjust_sku_stock":
       if (!record) throw providerResponseError("Xiaohongshu returned an invalid SKU stock result");
       return { stock: record };
+    case "list_item_skus":
+      if (!record) throw providerResponseError("Xiaohongshu returned an invalid item SKU list");
+      return {
+        items: requireArray(record.data, "item SKU list"),
+        total: requireNonNegativeInteger(record.total, "item total"),
+        pageNo: optionalInteger(record.pageNO) ?? 1,
+        pageSize: optionalInteger(record.pageSize) ?? 50,
+      };
+    case "create_item":
+    case "update_item":
+      if (!record) throw providerResponseError("Xiaohongshu returned an invalid item");
+      return { item: record };
+    case "upload_material":
+      if (!record) throw providerResponseError("Xiaohongshu returned an invalid material");
+      return { material: record };
+    case "list_materials":
+      if (!record) throw providerResponseError("Xiaohongshu returned an invalid material list");
+      return { materials: requireArray(record.materialDetailList, "material list") };
+    case "search_brands":
+      if (!record) throw providerResponseError("Xiaohongshu returned an invalid brand list");
+      return { brands: requireArray(record.brands, "brand list") };
+    case "list_carriage_templates":
+      if (!record) throw providerResponseError("Xiaohongshu returned an invalid carriage template list");
+      return {
+        templates: requireArray(record.carriageTemplateList, "carriage template list"),
+        total: requireNonNegativeInteger(record.totalCount, "carriage template total"),
+      };
+    case "list_logistics_plans":
+      if (!record) throw providerResponseError("Xiaohongshu returned an invalid logistics plan list");
+      return { plans: requireArray(record.logisticsPlans, "logistics plan list") };
+    case "list_address_records":
+      if (!record) throw providerResponseError("Xiaohongshu returned an invalid address record list");
+      return {
+        addresses: requireArray(record.sellerAddressRecordList, "address record list"),
+        total: requireNonNegativeInteger(record.total, "address record total"),
+      };
     case "list_categories":
       if (!record) throw providerResponseError("Xiaohongshu returned an invalid category list");
       return { categories: requireArray(record.categoryV3s, "category list") };
@@ -578,6 +684,44 @@ function normalizeActionOutput(
     case "set_sku_availability":
       return { success: true };
   }
+}
+
+function buildItemParameters(input: Record<string, unknown>, update: boolean): Record<string, unknown> {
+  const images = looseArray(input.images);
+  if (images.length === 0) {
+    throw providerInputError("images must be a non-empty array");
+  }
+  const skuListField = update ? "updateSkuList" : "createSkuList";
+  const skuList = looseArray(input[skuListField]);
+  if (skuList.length === 0) {
+    throw providerInputError(`${skuListField} must be a non-empty array`);
+  }
+  return compactObject({
+    itemId: update ? requiredInputString(input.itemId, "itemId") : undefined,
+    name: requiredInputString(input.name, "name"),
+    categoryId: requiredInputString(input.categoryId, "categoryId"),
+    shippingTemplateId: requiredInputString(input.shippingTemplateId, "shippingTemplateId"),
+    shippingGrossWeight: optionalInteger(input.shippingGrossWeight),
+    images,
+    brandId: optionalString(input.brandId),
+    attributes: optionalNonEmptyArray(input.attributes),
+    variantIds: optionalStringArray(input.variantIds),
+    articleNo: optionalString(input.articleNo),
+    description: optionalString(input.description),
+    itemShortTitle: optionalString(input.itemShortTitle),
+    deliveryMode: optionalInteger(input.deliveryMode),
+    freeReturn: optionalInteger(input.freeReturn),
+    videos: optionalNonEmptyArray(input.videos),
+    imageDescriptions: optionalNonEmptyArray(input.imageDescriptions),
+    createSkuList: update ? optionalNonEmptyArray(input.createSkuList) : undefined,
+    deleteSkuIdList: update ? optionalStringArray(input.deleteSkuIdList) : undefined,
+    [skuListField]: skuList,
+  });
+}
+
+function optionalNonEmptyArray(value: unknown): unknown[] | undefined {
+  const items = looseArray(value);
+  return items.length > 0 ? items : undefined;
 }
 
 function requireOrderListTimestamp(value: unknown, fieldName: string): number {

@@ -83,6 +83,22 @@ describe("credentialValidators.customCredential", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
+  // The item publish APIs can answer { success: true, error_code: 50209 } with no data for a business
+  // rejection; the error code has to win over the success flag so the message is not lost.
+  it("treats success with a non-zero error code and no data as an upstream error", async () => {
+    const fetcher = (async () =>
+      Response.json({
+        success: true,
+        error_code: 50209,
+        error_msg: "当前商品必须支持七天无理由退货",
+      })) as typeof fetch;
+    const validate = credentialValidators.customCredential;
+    if (!validate) throw new Error("missing customCredential validator");
+    await expect(
+      validate({ values: { appId: "x", appSecret: "y", accessToken: "z" } }, { fetcher }),
+    ).rejects.toMatchObject({ status: 502, message: "[50209] 当前商品必须支持七天无理由退货" });
+  });
+
   // The gateway reports throttling as HTTP 200 with error_code -9013 rather than an HTTP 429.
   it("maps the gateway throttle response to a 429", async () => {
     const fetcher = (async () =>

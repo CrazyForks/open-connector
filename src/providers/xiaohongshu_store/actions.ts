@@ -25,6 +25,38 @@ const orderIdSchema = s.nonWhitespaceString("The Xiaohongshu order ID.");
 const expressCompanyCodeSchema = s.nonWhitespaceString(
   "The Xiaohongshu express company code, as returned by list_express_companies.",
 );
+const itemImageSchema = s.looseObject("One image.", {
+  link: s.nonWhitespaceString("The image URL returned by upload_material."),
+});
+const itemDeliveryTimeSchema = s.looseObject("The SKU delivery time.", {
+  type: s.integer("The delivery time type: 3 for same-day, 4 for relative hours, or 5 for an absolute time.", {
+    minimum: 3,
+    maximum: 5,
+  }),
+  time: s.nonWhitespaceString("The delivery time value for the chosen type."),
+});
+const createItemSkuSchema = s.looseObject(
+  "One SKU to create. Other upstream SKU fields such as originalPrice, variants, barcode, erpCode, and specImage pass through unchanged.",
+  {
+    price: s.nonNegativeInteger("The SKU price in fen."),
+    stock: s.nonNegativeInteger("The SKU stock."),
+    logisticsPlanId: s.nonWhitespaceString("The logistics plan ID, from list_logistics_plans."),
+    deliveryTime: itemDeliveryTimeSchema,
+  },
+);
+const updateItemSkuSchema = s.looseObject(
+  "One SKU to update. Other upstream SKU fields such as originalPrice, variants, barcode, erpCode, and specImage pass through unchanged.",
+  {
+    skuId: s.nonWhitespaceString("The SKU ID, from list_item_skus or get_item."),
+    price: s.nonNegativeInteger("The SKU price in fen."),
+    stock: s.nonNegativeInteger("The SKU stock."),
+    logisticsPlanId: s.nonWhitespaceString("The logistics plan ID, from list_logistics_plans."),
+    deliveryTime: itemDeliveryTimeSchema,
+  },
+);
+const shippingGrossWeightSchema = s.nonNegativeInteger(
+  "The item shipping weight in grams. Required to be positive when the carriage template charges by weight.",
+);
 
 export const xiaohongshuStoreActions: ActionDefinition[] = [
   defineProviderAction(service, {
@@ -582,6 +614,320 @@ export const xiaohongshuStoreActions: ActionDefinition[] = [
         "The express company records.",
         s.looseObject("A Xiaohongshu express company with code and name."),
       ),
+    }),
+  }),
+  defineProviderAction(service, {
+    name: "list_item_skus",
+    operationType: "read",
+    description:
+      "List Xiaohongshu items together with their full SKU details such as price, stock, and logistics plan.",
+    inputSchema: s.object(
+      "The filters used to list Xiaohongshu items with SKU details. Passing a SKU ID ignores the other filters.",
+      {
+        id: s.nonWhitespaceString("An exact Xiaohongshu SKU ID."),
+        createTimeFrom: timestampMsSchema,
+        createTimeTo: timestampMsSchema,
+        updateTimeFrom: timestampMsSchema,
+        updateTimeTo: timestampMsSchema,
+        buyable: s.boolean("Whether to include only items currently on sale."),
+        stockGte: s.nonNegativeInteger("The minimum stock quantity to include."),
+        stockLte: s.nonNegativeInteger("The maximum stock quantity to include."),
+        barcode: s.nonWhitespaceString("An item barcode."),
+        scSkucode: s.nonWhitespaceString("A Xiaohongshu SKU code."),
+        singlePackOnly: s.boolean("Whether to return only single-item packs."),
+        lastId: s.nonWhitespaceString("The cursor from the previous page when syncing the whole catalog."),
+        isChannel: s.boolean("Whether to include only channel items."),
+        pageNo: pageNoSchema,
+        pageSize: pageSizeSchema,
+      },
+      {
+        optional: [
+          "id",
+          "createTimeFrom",
+          "createTimeTo",
+          "updateTimeFrom",
+          "updateTimeTo",
+          "buyable",
+          "stockGte",
+          "stockLte",
+          "barcode",
+          "scSkucode",
+          "singlePackOnly",
+          "lastId",
+          "isChannel",
+          "pageNo",
+          "pageSize",
+        ],
+      },
+    ),
+    outputSchema: s.object("A paginated Xiaohongshu item and SKU result.", {
+      items: s.array(
+        "The item records, each with its item and sku details.",
+        s.looseObject("A Xiaohongshu item and SKU pair."),
+      ),
+      total: s.nonNegativeInteger("The total number of matching SKUs reported by Xiaohongshu."),
+      pageNo: s.positiveInteger("The requested one-based page number."),
+      pageSize: s.positiveInteger("The requested number of records per page."),
+    }),
+  }),
+  defineProviderAction(service, {
+    name: "create_item",
+    operationType: "write",
+    description:
+      "Create a Xiaohongshu item with its SKUs. Typical setup order: list_categories, get_category_attributes, search_brands, list_carriage_templates, list_logistics_plans, then upload_material for the images.",
+    inputSchema: s.object(
+      "The item and SKU data used to create a Xiaohongshu product.",
+      {
+        name: s.nonWhitespaceString("The item title."),
+        categoryId: s.nonWhitespaceString("The leaf category ID, from list_categories."),
+        shippingTemplateId: s.nonWhitespaceString("The carriage template ID, from list_carriage_templates."),
+        shippingGrossWeight: shippingGrossWeightSchema,
+        images: s.array(
+          "The main images. Upload files with upload_material first and pass each returned url as link.",
+          itemImageSchema,
+          { minItems: 1 },
+        ),
+        createSkuList: s.array(
+          "The SKUs to create. Each needs price (in fen), stock, logisticsPlanId (from list_logistics_plans), and deliveryTime ({ type, time }).",
+          createItemSkuSchema,
+          { minItems: 1 },
+        ),
+        brandId: s.nonWhitespaceString("The brand ID, from search_brands."),
+        attributes: s.array(
+          "The category attributes, from get_category_attributes: { propertyId, name, value, valueId, valueList }.",
+          s.looseObject("One attribute assignment."),
+        ),
+        variantIds: s.array("The spec type IDs of the item.", s.nonWhitespaceString("A spec type ID.")),
+        articleNo: s.nonWhitespaceString("The merchant article number."),
+        description: s.nonWhitespaceString("The item description, up to 500 characters."),
+        itemShortTitle: s.nonWhitespaceString("The item short title."),
+        deliveryMode: s.integer("The delivery mode: 0 for normal delivery or 1 for no-logistics delivery.", {
+          minimum: 0,
+          maximum: 1,
+        }),
+        freeReturn: s.integer("The free-return policy: 1 or 2.", { minimum: 1, maximum: 2 }),
+        videos: s.array(
+          "The main videos, in the same { link } shape as images.",
+          s.looseObject("One video: { link }."),
+        ),
+        imageDescriptions: s.array(
+          "The description images, in the same { link } shape as images.",
+          s.looseObject("One description image: { link }."),
+        ),
+      },
+      {
+        optional: [
+          "shippingGrossWeight",
+          "brandId",
+          "attributes",
+          "variantIds",
+          "articleNo",
+          "description",
+          "itemShortTitle",
+          "deliveryMode",
+          "freeReturn",
+          "videos",
+          "imageDescriptions",
+        ],
+      },
+    ),
+    outputSchema: s.object("The created Xiaohongshu item.", { item: rawItemSchema }),
+  }),
+  defineProviderAction(service, {
+    name: "update_item",
+    operationType: "write",
+    description:
+      "Update a Xiaohongshu item and its SKUs: edit item fields, change existing SKUs through updateSkuList, add new ones through createSkuList, and remove SKUs through deleteSkuIdList.",
+    inputSchema: s.object(
+      "The item and SKU data used to update a Xiaohongshu product.",
+      {
+        itemId: s.nonWhitespaceString("The Xiaohongshu item ID."),
+        name: s.nonWhitespaceString("The item title."),
+        categoryId: s.nonWhitespaceString("The leaf category ID, from list_categories."),
+        shippingTemplateId: s.nonWhitespaceString("The carriage template ID, from list_carriage_templates."),
+        shippingGrossWeight: shippingGrossWeightSchema,
+        images: s.array(
+          "The main images. Upload files with upload_material first and pass each returned url as link.",
+          itemImageSchema,
+          { minItems: 1 },
+        ),
+        updateSkuList: s.array(
+          "The existing SKUs to update. Each needs skuId, price (in fen), stock, logisticsPlanId (from list_logistics_plans), and deliveryTime ({ type, time }).",
+          updateItemSkuSchema,
+          { minItems: 1 },
+        ),
+        createSkuList: s.array(
+          "The new SKUs to add to the item, in the same shape as updateSkuList without skuId.",
+          createItemSkuSchema,
+        ),
+        deleteSkuIdList: s.array("The SKU IDs to remove from the item.", s.nonWhitespaceString("A SKU ID.")),
+        brandId: s.nonWhitespaceString("The brand ID, from search_brands."),
+        attributes: s.array(
+          "The category attributes, from get_category_attributes: { propertyId, name, value, valueId, valueList }.",
+          s.looseObject("One attribute assignment."),
+        ),
+        variantIds: s.array("The spec type IDs of the item.", s.nonWhitespaceString("A spec type ID.")),
+        articleNo: s.nonWhitespaceString("The merchant article number."),
+        description: s.nonWhitespaceString("The item description, up to 500 characters."),
+        itemShortTitle: s.nonWhitespaceString("The item short title."),
+        deliveryMode: s.integer("The delivery mode: 0 for normal delivery or 1 for no-logistics delivery.", {
+          minimum: 0,
+          maximum: 1,
+        }),
+        freeReturn: s.integer("The free-return policy: 1 or 2.", { minimum: 1, maximum: 2 }),
+        videos: s.array(
+          "The main videos, in the same { link } shape as images.",
+          s.looseObject("One video: { link }."),
+        ),
+        imageDescriptions: s.array(
+          "The description images, in the same { link } shape as images.",
+          s.looseObject("One description image: { link }."),
+        ),
+      },
+      {
+        optional: [
+          "shippingGrossWeight",
+          "createSkuList",
+          "deleteSkuIdList",
+          "brandId",
+          "attributes",
+          "variantIds",
+          "articleNo",
+          "description",
+          "itemShortTitle",
+          "deliveryMode",
+          "freeReturn",
+          "videos",
+          "imageDescriptions",
+        ],
+      },
+    ),
+    outputSchema: s.object("The updated Xiaohongshu item.", { item: rawItemSchema }),
+  }),
+  defineProviderAction(service, {
+    name: "upload_material",
+    operationType: "write",
+    description: "Upload an image or video to the Xiaohongshu material center and get its url for use in item images.",
+    inputSchema: s.object("The material to upload.", {
+      name: s.nonWhitespaceString("The material file name."),
+      type: s.stringEnum("The material type.", ["IMAGE", "VIDEO"]),
+      contentBase64: s.nonWhitespaceString("The file content as a base64 string."),
+    }),
+    outputSchema: s.object("The uploaded material.", {
+      material: s.looseObject("The material record with materialId, url, and upload status."),
+    }),
+  }),
+  defineProviderAction(service, {
+    name: "list_materials",
+    operationType: "read",
+    description: "List materials in the Xiaohongshu material center, for example to check an upload status.",
+    inputSchema: s.object(
+      "The filters used to list Xiaohongshu materials.",
+      {
+        materialId: s.nonWhitespaceString("An exact material ID."),
+        name: s.nonWhitespaceString("A material file name filter."),
+        type: s.stringEnum("The material type.", ["IMAGE", "VIDEO"]),
+        status: s.integer("The upload status: 1 for success, 2 for uploading, or 3 for failed.", {
+          minimum: 1,
+          maximum: 3,
+        }),
+        createTimeFrom: timestampMsSchema,
+        createTimeTo: timestampMsSchema,
+        ascByCreateTime: s.boolean("Whether to sort by creation time ascending instead of descending."),
+        pageNo: pageNoSchema,
+        pageSize: s.integer("The number of materials per page. Defaults to 50 and cannot exceed 500.", {
+          minimum: 1,
+          maximum: 500,
+        }),
+      },
+      {
+        optional: [
+          "materialId",
+          "name",
+          "type",
+          "status",
+          "createTimeFrom",
+          "createTimeTo",
+          "ascByCreateTime",
+          "pageNo",
+          "pageSize",
+        ],
+      },
+    ),
+    outputSchema: s.object("The Xiaohongshu material list.", {
+      materials: s.array("The material records.", s.looseObject("A Xiaohongshu material record.")),
+    }),
+  }),
+  defineProviderAction(service, {
+    name: "search_brands",
+    operationType: "read",
+    description: "Search the brands available for a leaf Xiaohongshu category.",
+    inputSchema: s.object(
+      "The category and keyword used to search Xiaohongshu brands.",
+      {
+        categoryId: s.nonWhitespaceString("The leaf category ID, from list_categories."),
+        keyword: s.nonWhitespaceString("A brand name keyword."),
+        pageNo: pageNoSchema,
+        pageSize: s.integer("The number of brands per page. Defaults to 20 and cannot exceed 20.", {
+          minimum: 1,
+          maximum: 20,
+        }),
+      },
+      { optional: ["keyword", "pageNo", "pageSize"] },
+    ),
+    outputSchema: s.object("The Xiaohongshu brand search result.", {
+      brands: s.array("The matching brands.", s.looseObject("A Xiaohongshu brand with id, name, enName, and image.")),
+    }),
+  }),
+  defineProviderAction(service, {
+    name: "list_carriage_templates",
+    operationType: "read",
+    description: "List the carriage (freight) templates of the Xiaohongshu shop.",
+    inputSchema: s.object(
+      "The pagination used to list carriage templates.",
+      {
+        pageIndex: s.integer("The one-based page number. Defaults to 1.", { minimum: 1 }),
+        pageSize: s.integer("The number of carriage templates per page. Defaults to 20 and cannot exceed 100.", {
+          minimum: 1,
+          maximum: 100,
+        }),
+      },
+      { optional: ["pageIndex", "pageSize"] },
+    ),
+    outputSchema: s.object("A paginated Xiaohongshu carriage template result.", {
+      templates: s.array("The carriage template records.", s.looseObject("A Xiaohongshu carriage template.")),
+      total: s.nonNegativeInteger("The total number of carriage templates reported by Xiaohongshu."),
+    }),
+  }),
+  defineProviderAction(service, {
+    name: "list_logistics_plans",
+    operationType: "read",
+    description:
+      "List the logistics plans of the Xiaohongshu shop. planInfoId is the logisticsPlanId used when creating SKUs.",
+    inputSchema: s.object("No input is required to list logistics plans.", {}),
+    outputSchema: s.object("The Xiaohongshu logistics plan result.", {
+      plans: s.array("The logistics plan records.", s.looseObject("A Xiaohongshu logistics plan.")),
+    }),
+  }),
+  defineProviderAction(service, {
+    name: "list_address_records",
+    operationType: "read",
+    description:
+      "List the seller address records of the Xiaohongshu shop, including return addresses. sellerAddressRecordId is required when agreeing to a return shipment in audit_after_sale.",
+    inputSchema: s.object(
+      "The pagination used to list seller address records.",
+      {
+        pageIndex: s.integer("The one-based page number. Defaults to 1.", { minimum: 1 }),
+        pageSize: s.integer("The number of address records per page. Defaults to 20 and cannot exceed 200.", {
+          minimum: 1,
+          maximum: 200,
+        }),
+      },
+      { optional: ["pageIndex", "pageSize"] },
+    ),
+    outputSchema: s.object("A paginated Xiaohongshu seller address result.", {
+      addresses: s.array("The seller address records.", s.looseObject("A Xiaohongshu seller address record.")),
+      total: s.nonNegativeInteger("The total number of address records reported by Xiaohongshu."),
     }),
   }),
 ];
