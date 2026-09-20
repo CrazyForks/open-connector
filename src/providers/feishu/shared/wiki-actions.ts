@@ -131,8 +131,10 @@ export function createFeishuWikiActions(service: string): readonly ActionDefinit
       name: "get_wiki_node",
       operationType: "read",
       description: "Resolve and get a Feishu Wiki node by token and object type.",
-      requiredScopes: ["wiki:node:retrieve"],
-      providerPermissions: ["wiki:node:retrieve"],
+      // Feishu refuses `wiki:node:retrieve` for this endpoint with 99991679
+      // and names `wiki:node:read` as the narrow accepted permission.
+      requiredScopes: ["wiki:node:read"],
+      providerPermissions: ["wiki:node:read"],
       inputSchema: s.object(
         "Identify the Wiki node.",
         {
