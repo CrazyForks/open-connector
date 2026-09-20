@@ -588,6 +588,98 @@ describe("OAuthFlowService", () => {
     ]);
   });
 
+  it("isolates Slack custom user clients and accepts the pinned top-level user token response", async () => {
+    const services = createServices(
+      [
+        { ...slackProvider, actions: [] },
+        { ...slackbotProvider, actions: [] },
+      ],
+      {
+        allowedCustomOAuth: ["slack"],
+        secretCodec: new AesGcmSecretCodec("slack-test-key"),
+      },
+    );
+    await services.clientConfigs.upsertConfig({
+      service: "slack",
+      clientId: "shared-client",
+      clientSecret: "shared-secret",
+    });
+    const requestedScopes = [
+      "channels:read",
+      "channels:history",
+      "groups:read",
+      "groups:history",
+      "im:read",
+      "im:history",
+      "mpim:read",
+      "mpim:history",
+      "users:read",
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://slack.com/api/oauth.v2.user.access");
+        const body = new URLSearchParams(String(init?.body));
+        const tenant = body.get("code");
+        expect(["tenant-a", "tenant-b"]).toContain(tenant);
+        expect(body.get("client_id")).toBe(`${tenant}-client`);
+        expect(body.get("client_secret")).toBe(`${tenant}-secret`);
+        expect(body.get("redirect_uri")).toBe("http://localhost:3000/oauth/callback");
+        return Response.json({
+          ok: true,
+          access_token: `xoxp-${tenant}`,
+          refresh_token: `${tenant}-refresh`,
+          token_type: "Bearer",
+          expires_in: 43_200,
+          scope: requestedScopes.join(","),
+        });
+      }),
+    );
+    const attempts = [];
+    for (const tenant of ["tenant-a", "tenant-b"]) {
+      const started = await services.flow.startAuthorization({
+        service: "slack",
+        connectionName: tenant,
+        clientConfig: { clientId: `${tenant}-client`, clientSecret: `${tenant}-secret`, requestedScopes },
+      });
+      const url = new URL(started.authorizationUrl);
+      expect(`${url.origin}${url.pathname}`).toBe("https://slack.com/oauth/v2_user/authorize");
+      expect(url.searchParams.get("client_id")).toBe(`${tenant}-client`);
+      expect(url.searchParams.get("scope")?.split(",").sort()).toEqual([...requestedScopes].sort());
+      expect(url.searchParams.has("client_secret")).toBe(false);
+      expect(url.searchParams.has("user_scope")).toBe(false);
+      attempts.push({ tenant, started });
+    }
+    for (const { tenant, started } of attempts.reverse()) {
+      await services.flow.completeAuthorization({ state: started.state, code: tenant });
+      await expect(services.connections.getCredential("slack", tenant)).resolves.toMatchObject({
+        authType: "oauth2",
+        accessToken: `xoxp-${tenant}`,
+        refreshToken: `${tenant}-refresh`,
+        tokenType: "Bearer",
+        metadata: {
+          oauthClientConfig: {
+            clientId: `${tenant}-client`,
+            clientSecret: `${tenant}-secret`,
+            requestedScopes,
+          },
+        },
+      });
+    }
+    await expect(services.connections.getCredential("slack")).resolves.toBeUndefined();
+    await expect(services.connections.getCredential("slackbot")).resolves.toBeUndefined();
+    await expect(services.clientConfigs.getConfig("slack")).resolves.toMatchObject({
+      clientId: "shared-client",
+      clientSecret: "shared-secret",
+    });
+    await expect(
+      services.flow.startAuthorization({
+        service: "slackbot",
+        clientConfig: { clientId: "bot-client", clientSecret: "bot-secret" },
+      }),
+    ).rejects.toMatchObject({ code: "oauth_custom_app_not_allowed" });
+  });
+
   it("rejects expired OAuth authorization states", async () => {
     const services = createServices([oauthProvider], { stateMaxAgeMs: 1 });
     await services.clientConfigs.upsertConfig({

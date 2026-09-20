@@ -163,7 +163,7 @@ export const provider: ProviderDefinition = {
   service,
   displayName: "Slack",
   categories: ["Communication", "Productivity"],
-  authTypes: ["oauth2"],
+  authTypes: ["oauth2", "api_key"],
   auth: [
     {
       type: "oauth2",
@@ -174,6 +174,13 @@ export const provider: ProviderDefinition = {
       scopeSeparator: ",",
       tokenEndpointAuthMethod: "client_secret_post",
       authorizationOptions: slackAuthorizationOptions,
+    },
+    {
+      type: "api_key",
+      label: "Access token",
+      placeholder: "xoxb-... or xoxp-...",
+      description:
+        "Slack bot or user token used with the Authorization Bearer header. Create a Slack app, install it to the workspace, then copy the bot token or user token from OAuth & Permissions.",
     },
   ],
   homepageUrl: "https://slack.com",

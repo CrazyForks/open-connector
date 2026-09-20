@@ -20,6 +20,27 @@ const conversationTypeSchema = s.stringEnum([...slackConversationTypes], {
   description: "A Slack conversation type.",
 });
 
+// `conversations.history` and `conversations.replies` take the same time
+// window, so it is declared once. The bounds are Slack `ts` strings
+// ("<epoch seconds>.<6 digits>"), NOT epoch integers: Slack compares them
+// against the message `ts` lexically-as-decimal, and a bare integer is a
+// legal value for that same field. Left as `string` rather than a pattern
+// so a caller can pass a `ts` it read back from a message verbatim.
+const historyWindowProperties = {
+  oldest: s.string({
+    description:
+      "Only return messages after this Slack timestamp, for example '1700000000.123456'. The message at exactly this timestamp is included only when inclusive is true.",
+  }),
+  latest: s.string({
+    description:
+      "Only return messages before this Slack timestamp. Defaults to now. The message at exactly this timestamp is included only when inclusive is true.",
+  }),
+  inclusive: s.boolean({
+    description:
+      "Include messages whose timestamp equals oldest or latest. Slack ignores this unless one of those bounds is set.",
+  }),
+};
+
 const slackBlockSchema = s.unknownObject(
   "A Slack Block Kit block object. Pass the block exactly as Slack documents it.",
 );
@@ -45,11 +66,48 @@ const messageContentProperties = {
   metadata: s.unknownObject("Slack message metadata to attach to the message."),
 };
 
+const slackReactionSchema = s.looseObject(
+  {
+    name: s.string({ description: "The emoji name of the reaction." }),
+    count: s.integer({ description: "How many users added this reaction." }),
+    userIds: s.array(s.string({ description: "A Slack user ID." }), {
+      description: "The users who added this reaction, as far as Slack reports them.",
+    }),
+  },
+  { description: "A reaction summary on a Slack message." },
+);
+
+// Only fields the executor actually normalizes are declared. The object is
+// loose, but that permits extras it does NOT make them appear: the executor
+// builds each row explicitly, so an undeclared Slack field is simply not
+// emitted. Deliberately absent: `blocks`, `attachments` and `files`. Those
+// are unbounded nested payloads on a row shape that ETL reads in bulk, and
+// each wants its own normalized contract rather than a raw passthrough.
 const slackMessageSchema = s.looseObject(
   {
     ts: s.string({ description: "The message timestamp identifier." }),
+    type: s.string({ description: "The Slack message type, normally 'message'." }),
+    subtype: s.string({
+      description: "The Slack message subtype ('channel_join', 'bot_message', …) when the message has one.",
+    }),
     userId: s.string({ description: "The user ID of the message author." }),
+    botId: s.string({ description: "The bot ID of the message author when a bot posted it." }),
+    appId: s.string({ description: "The Slack app ID that posted the message when an app posted it." }),
+    username: s.string({ description: "The display username Slack attached to a bot or app message." }),
+    teamId: s.string({ description: "The Slack team ID the message belongs to." }),
+    clientMsgId: s.string({ description: "The client-generated message identifier when Slack returns one." }),
     text: s.string({ description: "The text content of the message." }),
+    editedTs: s.string({ description: "The timestamp of the most recent edit, when the message was edited." }),
+    threadTs: s.string({
+      description:
+        "The timestamp of the thread parent. Equal to ts on a thread parent, and absent on a message that is not in a thread.",
+    }),
+    parentUserId: s.string({ description: "The author of the thread parent, on a threaded reply." }),
+    replyCount: s.integer({ description: "The number of replies to this thread parent." }),
+    replyUsersCount: s.integer({ description: "The number of distinct users who replied to this thread parent." }),
+    latestReply: s.string({ description: "The timestamp of the most recent reply to this thread parent." }),
+    isLocked: s.boolean({ description: "Whether the thread is locked." }),
+    reactions: s.array(slackReactionSchema, { description: "Reaction summaries attached to the message." }),
   },
   { description: "A Slack message record." },
 );
@@ -149,6 +207,22 @@ const reactionItemSchema = s.unknownObject("A Slack item with reactions.");
 
 export const slackActions: ActionDefinition[] = [
   action({
+    name: "get_current_user",
+    operationType: "read",
+    description:
+      "Get the workspace and user identity of the connected Slack credential, including whether it belongs to a bot.",
+    requiredScopes: [],
+    inputSchema: s.object({}),
+    outputSchema: s.object(
+      {
+        teamId: s.nonEmptyString("The Slack workspace ID."),
+        userId: userIdSchema,
+        isBot: s.boolean({ description: "Whether auth.test identifies this credential with a bot_id." }),
+      },
+      { required: ["teamId", "userId", "isBot"] },
+    ),
+  }),
+  action({
     name: "list_channels",
     operationType: "read",
     description: "List Slack public channels visible to the connected Slack identity.",
@@ -172,7 +246,13 @@ export const slackActions: ActionDefinition[] = [
     inputSchema: s.object(
       {
         channelId: channelIdSchema,
-        limit: s.integer({ minimum: 1, maximum: 100, description: "The maximum number of messages to return." }),
+        // 999 is `conversations.history`'s documented ceiling. The former 100
+        // was this action's own invention and cost a request per 100 messages.
+        limit: s.integer({ minimum: 1, maximum: 999, description: "The maximum number of messages to return." }),
+        cursor: s.string({
+          description: "The Slack pagination cursor from a previous page. Omit for the first page.",
+        }),
+        ...historyWindowProperties,
       },
       { required: ["channelId"], description: "Input parameters for reading Slack conversation history." },
     ),
@@ -180,8 +260,43 @@ export const slackActions: ActionDefinition[] = [
       {
         messages: s.array(slackMessageSchema, { description: "The list of messages in the conversation." }),
         hasMore: s.boolean({ description: "Whether more messages are available beyond this page." }),
+        nextCursor: s.string({
+          description: "The cursor for the next page, or an empty string when this is the last page.",
+        }),
       },
-      { required: ["messages", "hasMore"], description: "The output payload for this action." },
+      { required: ["messages", "hasMore", "nextCursor"], description: "The output payload for this action." },
+    ),
+  }),
+  action({
+    name: "conversations_members",
+    operationType: "read",
+    description:
+      "List the member user IDs of a Slack conversation. Returns one page; pass the cursor from nextCursor until it comes back empty.",
+    requiredScopes: ["channels:read", "groups:read", "im:read", "mpim:read"],
+    inputSchema: s.object(
+      {
+        channelId: channelIdSchema,
+        cursor: s.string({
+          description: "The Slack pagination cursor from a previous page. Omit for the first page.",
+        }),
+        limit: s.integer({
+          minimum: 1,
+          maximum: 1000,
+          description: "The maximum number of members to return per page.",
+        }),
+      },
+      { required: ["channelId"], description: "Input parameters for listing Slack conversation members." },
+    ),
+    outputSchema: s.object(
+      {
+        memberIds: s.array(userIdSchema, {
+          description: "The Slack user IDs that are members of the conversation.",
+        }),
+        nextCursor: s.string({
+          description: "The cursor for the next page, or an empty string when this is the last page.",
+        }),
+      },
+      { required: ["memberIds", "nextCursor"], description: "The output payload for this action." },
     ),
   }),
   action({
@@ -302,6 +417,11 @@ export const slackActions: ActionDefinition[] = [
       {
         channelId: channelIdSchema,
         threadTs: s.nonEmptyString("The timestamp of the parent message."),
+        limit: s.integer({ minimum: 1, maximum: 999, description: "The maximum number of messages to return." }),
+        cursor: s.string({
+          description: "The Slack pagination cursor from a previous page. Omit for the first page.",
+        }),
+        ...historyWindowProperties,
       },
       { required: ["channelId", "threadTs"], description: "Input parameters for reading a Slack thread." },
     ),
@@ -309,8 +429,11 @@ export const slackActions: ActionDefinition[] = [
       {
         messages: s.array(slackMessageSchema, { description: "The list of messages in the thread." }),
         hasMore: s.boolean({ description: "Whether more messages are available beyond this page." }),
+        nextCursor: s.string({
+          description: "The cursor for the next page, or an empty string when this is the last page.",
+        }),
       },
-      { required: ["messages", "hasMore"], description: "The output payload for this action." },
+      { required: ["messages", "hasMore", "nextCursor"], description: "The output payload for this action." },
     ),
   }),
   action({
