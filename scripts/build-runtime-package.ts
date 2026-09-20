@@ -34,7 +34,10 @@ await writeFile(
       description: "Embeddable Open Connector runtime for Node.js and Bun.",
       license: "Apache-2.0",
       type: "module",
-      exports: { ".": { types: "./src/server/connector-runtime.d.ts", import: "./src/server/connector-runtime.js" } },
+      exports: {
+        ".": { types: "./src/server/connector-runtime.d.ts", import: "./src/server/connector-runtime.js" },
+        "./build": { types: "./src/server/connector-build.d.ts", import: "./src/server/connector-build.js" },
+      },
       dependencies: source.dependencies,
       engines: { node: ">=22.18.0" },
       keywords: ["connector", "oauth", "mcp", "agents", "integrations"],

@@ -6,7 +6,6 @@ import type { IStagedTransitFileService } from "./files/transit-file-store.ts";
 
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { loadCatalog } from "../catalog-store.ts";
 import { ActionPolicyService } from "../core/action-policy.ts";
 import { setEgressTrustedHosts, setPrivateNetworkAccessAllowed } from "../core/request.ts";
@@ -14,10 +13,10 @@ import { ProviderLoader } from "../providers/provider-loader.ts";
 import { executorModules } from "../providers/registry.generated.ts";
 import { createRuntimeJwtVerifier } from "./api/runtime-jwt.ts";
 import { createConnectApp } from "./connect-app.ts";
+import { getConnectorAssetDirectory } from "./connector-assets.ts";
 import { cleanupStagedTransitFiles, createNodeTransitFileUpload } from "./files/node-transit-file-upload.ts";
 import { TransitFileService } from "./files/transit-files.ts";
 import { createSecretCodec } from "./secrets/secret-codec.ts";
-import { isStandaloneExecutable } from "./server-assets.ts";
 import { createDirectoryMigrationSource } from "./storage/migration-source.ts";
 import { createNodeRuntimeDatabase } from "./storage/node-runtime-database.ts";
 import { DEFAULT_RUN_LIMIT } from "./storage/runtime-store.ts";
@@ -108,12 +107,7 @@ export interface ConnectorRuntime {
 
 let runtimeActive = false;
 
-/** Directory to include in a host's Bun compile.assets. Its basename keeps connector assets namespaced. */
-export function getConnectorAssetDirectory(): string {
-  return isStandaloneExecutable()
-    ? join(import.meta.dirname, "open-connector")
-    : fileURLToPath(new URL("../../assets/open-connector/", import.meta.url));
-}
+export { getConnectorAssetDirectory } from "./connector-assets.ts";
 
 /** Create a headless runtime without opening a listener or installing process signal handlers. */
 export async function createConnectorRuntime(options: ConnectorRuntimeOptions): Promise<ConnectorRuntime> {

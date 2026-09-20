@@ -130,6 +130,33 @@ For Bun executables, include `getConnectorAssetDirectory()` in
 the asset directory named `open-connector`; package assets resolve
 independently of the working directory.
 
+To include only selected providers, use the build helper:
+
+```ts
+import { getConnectorBuildOptions } from "@oomol-lab/open-connector/build";
+
+const prepared = await getConnectorBuildOptions({ providers: ["github", "slack"] });
+try {
+  await Bun.build({
+    entrypoints: ["./server.ts"],
+    target: "bun",
+    format: "esm",
+    splitting: true,
+    plugins: prepared.plugins,
+    external: prepared.external,
+    compile: { outfile: "./app", assets: prepared.assets },
+  });
+} finally {
+  await prepared.dispose();
+}
+```
+
+Omitting options or `providers` includes all providers; `providers: []` includes
+none. Unknown IDs fail preparation. Selection includes each provider's complete
+executor module and catalog entry, including authentication and action schemas.
+Shared runtime code and migrations remain included. The runtime API is unchanged,
+and the installed npm package still contains all providers.
+
 ## Documentation
 
 - [Runtime API and MCP](https://github.com/oomol-lab/open-connector/blob/main/docs/runtime-api.md)
