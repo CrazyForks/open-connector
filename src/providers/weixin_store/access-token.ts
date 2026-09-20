@@ -1,5 +1,6 @@
 import type { ProviderFetch } from "../provider-runtime.ts";
 
+import { createHash } from "node:crypto";
 import { optionalInteger, optionalNumber, optionalRecord, optionalString } from "../../core/cast.ts";
 import {
   ProviderRequestError,
@@ -45,6 +46,7 @@ interface WechatAccessTokenCacheEntry {
 
 const accessTokenCache = new Map<string, WechatAccessTokenCacheEntry>();
 const accessTokenInFlight = new Map<string, Promise<string>>();
+const accessTokenRefreshInFlight = new Map<string, Promise<string>>();
 
 export function readWeixinStoreCredential(values: Record<string, string>): WeixinStoreCredential {
   return {
@@ -66,17 +68,38 @@ export function readWeixinStoreCredential(values: Record<string, string>): Weixi
  * follow-up request; the shared mint still runs under the default 30 s timeout.
  */
 export async function getWechatAccessToken(input: WechatAccessTokenRequest): Promise<string> {
-  const cacheKey = `${input.credential.appId}\0${input.credential.appSecret}`;
+  const cacheKey = createHash("sha256")
+    .update(input.credential.appId)
+    .update("\0")
+    .update(input.credential.appSecret)
+    .digest("hex");
+  const refreshPending = accessTokenRefreshInFlight.get(cacheKey);
+  if (refreshPending) return refreshPending;
+
   const pending = accessTokenInFlight.get(cacheKey);
-  if (pending) {
-    return pending;
+  if (input.rejectedToken === undefined) {
+    if (pending) return pending;
+    const request = mintAndCacheAccessToken(input, cacheKey);
+    accessTokenInFlight.set(cacheKey, request);
+    try {
+      return await request;
+    } finally {
+      if (accessTokenInFlight.get(cacheKey) === request) accessTokenInFlight.delete(cacheKey);
+    }
   }
-  const request = mintAndCacheAccessToken(input, cacheKey);
-  accessTokenInFlight.set(cacheKey, request);
+
+  const refresh = (async () => {
+    const pendingToken = pending ? await pending.catch(() => undefined) : undefined;
+    if (pendingToken !== undefined && pendingToken !== input.rejectedToken) return pendingToken;
+    return mintAndCacheAccessToken(input, cacheKey);
+  })();
+  accessTokenRefreshInFlight.set(cacheKey, refresh);
   try {
-    return await request;
+    return await refresh;
   } finally {
-    accessTokenInFlight.delete(cacheKey);
+    if (accessTokenRefreshInFlight.get(cacheKey) === refresh) {
+      accessTokenRefreshInFlight.delete(cacheKey);
+    }
   }
 }
 

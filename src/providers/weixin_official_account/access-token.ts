@@ -1,5 +1,6 @@
 import type { ProviderFetch } from "../provider-runtime.ts";
 
+import { createHash } from "node:crypto";
 import { optionalInteger, optionalNumber, optionalRecord, optionalString } from "../../core/cast.ts";
 import {
   ProviderRequestError,
@@ -42,6 +43,11 @@ interface WechatAccessTokenCacheEntry {
 
 const accessTokenCache = new Map<string, WechatAccessTokenCacheEntry>();
 const accessTokenInFlight = new Map<string, Promise<string>>();
+const accessTokenRefreshInFlight = new Map<string, Promise<string>>();
+
+function accessTokenCacheKey(credential: WechatOfficialAccountCredential): string {
+  return createHash("sha256").update(credential.appId).update("\0").update(credential.appSecret).digest("hex");
+}
 
 export function readWechatOfficialAccountCredential(values: Record<string, string>): WechatOfficialAccountCredential {
   return {
@@ -58,17 +64,33 @@ export function readWechatOfficialAccountCredential(values: Record<string, strin
  * one invalidates the previous token, so duplicate mints must not happen.
  */
 export async function getWechatAccessToken(input: WechatAccessTokenRequest): Promise<string> {
-  const cacheKey = `${input.credential.appId}\0${input.credential.appSecret}`;
+  const cacheKey = accessTokenCacheKey(input.credential);
+  const refreshPending = accessTokenRefreshInFlight.get(cacheKey);
+  if (refreshPending) return refreshPending;
+
   const pending = accessTokenInFlight.get(cacheKey);
-  if (pending) {
-    return pending;
+  if (!input.forceRefresh) {
+    if (pending) return pending;
+    const request = mintAndCacheAccessToken(input, cacheKey);
+    accessTokenInFlight.set(cacheKey, request);
+    try {
+      return await request;
+    } finally {
+      if (accessTokenInFlight.get(cacheKey) === request) accessTokenInFlight.delete(cacheKey);
+    }
   }
-  const request = mintAndCacheAccessToken(input, cacheKey);
-  accessTokenInFlight.set(cacheKey, request);
+
+  const refresh = (async () => {
+    if (pending) await pending.catch(() => undefined);
+    return mintAndCacheAccessToken(input, cacheKey);
+  })();
+  accessTokenRefreshInFlight.set(cacheKey, refresh);
   try {
-    return await request;
+    return await refresh;
   } finally {
-    accessTokenInFlight.delete(cacheKey);
+    if (accessTokenRefreshInFlight.get(cacheKey) === refresh) {
+      accessTokenRefreshInFlight.delete(cacheKey);
+    }
   }
 }
 

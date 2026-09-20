@@ -11,6 +11,7 @@ import { chuhaijiangOperations } from "./chuhaijiang-actions.ts";
 import { normalizeChuhaijiang, searchChuhaijiangImage } from "./chuhaijiang-runtime.ts";
 import { mercadoOperations } from "./mercado-actions.ts";
 import { seerfarOperations } from "./seerfar-actions.ts";
+import { sifOperations } from "./sif-actions.ts";
 import { zhihuiyaOperations } from "./zhihuiya-actions.ts";
 import { validateZhihuiyaInput } from "./zhihuiya-runtime.ts";
 
@@ -42,6 +43,7 @@ interface DirectOperation {
   path: string;
   timeoutMs?: number;
   method?: "GET" | "POST";
+  gatewayBusinessCodeOnly?: boolean;
   buildBody?: (input: ActionInput) => ActionInput;
   normalize: (payload: unknown) => unknown;
 }
@@ -65,6 +67,12 @@ const directOperations: Record<string, DirectOperation> = {
         path,
         normalize: (payload: unknown) => requiredResponseRecord(payload, "LinkFox Seerfar response"),
       },
+    ]),
+  ),
+  ...Object.fromEntries(
+    sifOperations.map(({ action, path }) => [
+      action.name,
+      { path, gatewayBusinessCodeOnly: true, normalize: normalizeSifResult },
     ]),
   ),
   get_current_account: {
@@ -368,12 +376,14 @@ export async function executeLinkfoxAction(
   }
   const direct = directOperations[actionName];
   if (direct) {
+    if (direct.gatewayBusinessCodeOnly) validateSifInput(actionName, input);
     const body = direct.buildBody ? direct.buildBody(input) : input;
     const payload = await requestLinkfoxPayload(
       direct.path,
       {
         method: direct.method ?? "POST",
         timeoutMs: direct.timeoutMs,
+        gatewayBusinessCodeOnly: direct.gatewayBusinessCodeOnly,
         ...((direct.method ?? "POST") === "POST" ? { body } : {}),
       },
       apiKey,
@@ -390,6 +400,33 @@ export async function executeLinkfoxAction(
     throw providerError("invalid_input", `unknown linkfox action: ${actionName}`, 400);
   }
   return handler(input, { apiKey, fetcher, signal: parentSignal });
+}
+
+function validateSifInput(actionName: string, input: ActionInput): void {
+  if (actionName === "list_sif_asin_keywords") {
+    const periodType = optionalString(input.timePieceType) ?? "latelyDay";
+    const periodValue = optionalString(input.timePieceValue);
+    if ((periodType === "month" || periodType === "week") && !periodValue) {
+      throw new ProviderRequestError(400, "timePieceValue is required for month or week periods");
+    }
+  }
+  const startDate = optionalString(input.startDate);
+  const endDate = optionalString(input.endDate);
+  if ((startDate && !endDate) || (!startDate && endDate)) {
+    throw new ProviderRequestError(400, "startDate and endDate must be provided together");
+  }
+  if ((startDate || endDate) && input.last7d !== false) {
+    throw new ProviderRequestError(400, "last7d must be false when a date range is provided");
+  }
+  if (startDate && endDate && startDate > endDate) {
+    throw new ProviderRequestError(400, "startDate must not be later than endDate");
+  }
+  if (actionName === "get_sif_asin_traffic_summary") {
+    const asins = optionalString(input.asins);
+    if (asins && asins.split(",").length > 10) {
+      throw new ProviderRequestError(400, "asins must contain at most 10 comma-separated ASINs");
+    }
+  }
 }
 
 function validateLinkfoxActionInput(actionName: string, input: ActionInput): void {
@@ -498,7 +535,12 @@ function isNineteenDigitId(value: string): boolean {
 
 async function requestLinkfoxPayload(
   path: string,
-  options: { method: "GET" | "POST"; body?: ActionInput; timeoutMs?: number },
+  options: {
+    method: "GET" | "POST";
+    body?: ActionInput;
+    timeoutMs?: number;
+    gatewayBusinessCodeOnly?: boolean;
+  },
   apiKey: string,
   fetcher: typeof fetch,
   phase: LinkfoxRequestPhase = "execute",
@@ -520,7 +562,9 @@ async function requestLinkfoxPayload(
         signal,
       });
       const payload = await readJsonPayload(response);
-      const businessCode = readBusinessCode(payload);
+      const businessCode = options.gatewayBusinessCodeOnly
+        ? readGatewayBusinessCode(payload)
+        : readBusinessCode(payload);
       if (acceptCreditError && businessCode === 402) return payload;
       if (!response.ok || (businessCode !== undefined && businessCode !== 200)) {
         throw createLinkfoxError(response.status, businessCode, payload, phase);
@@ -592,6 +636,16 @@ function readBusinessCode(payload: unknown) {
   return undefined;
 }
 
+function readGatewayBusinessCode(payload: unknown): number | undefined {
+  const record = optionalRecord(payload);
+  for (const key of ["errcode", "errorCode"] as const) {
+    const value = record?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  }
+  return undefined;
+}
+
 function readErrorMessage(payload: unknown) {
   if (typeof payload === "string" && payload.trim()) {
     return payload.trim();
@@ -632,6 +686,32 @@ function normalizeDataList(payload: unknown) {
   return {
     total: readInteger(record.total) ?? data.length,
     data,
+    costToken: readNumber(record.costToken),
+  };
+}
+
+function normalizeSifResult(payload: unknown): Record<string, unknown> {
+  const record = requireRecord(payload, "LinkFox returned an invalid SIF response");
+  const code = typeof record.code === "string" || typeof record.code === "number" ? String(record.code) : undefined;
+  if (code !== "1") {
+    throw new ProviderRequestError(
+      502,
+      readString(record.msg) ?? "LinkFox SIF returned an unsuccessful business response",
+      record,
+    );
+  }
+  const data = readArray(record.data);
+  if (!data) throw new ProviderRequestError(502, "LinkFox SIF response did not include data", record);
+  return {
+    ...record,
+    code,
+    msg: readString(record.msg) ?? null,
+    total: readInteger(record.total) ?? data.length,
+    data,
+    columns: readArray(record.columns) ?? [],
+    type: readString(record.type) ?? null,
+    title: readString(record.title) ?? null,
+    costTime: readInteger(record.costTime),
     costToken: readNumber(record.costToken),
   };
 }

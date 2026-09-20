@@ -1,5 +1,5 @@
 import type { CredentialValidators, ProviderExecutors } from "../../core/types.ts";
-import type { ApiKeyProviderContext, ProviderActionHandlers, ProviderRuntimeHandler } from "../provider-runtime.ts";
+import type { ApiKeyProviderContext, ProviderRuntimeHandler } from "../provider-runtime.ts";
 import type { Client } from "@modelcontextprotocol/client";
 
 import { ProtocolError, SdkHttpError, UnauthorizedError } from "@modelcontextprotocol/client";
@@ -12,7 +12,9 @@ import {
   ProviderRequestError,
   requiredInputString,
 } from "../provider-runtime.ts";
-import { tongdaxinReadOnlyToolNames } from "./actions.ts";
+import { tongdaxinActions, tongdaxinReadOnlyToolNames } from "./actions.ts";
+import { normalizeTongdaxinNamedActionOutput } from "./named-action-output.ts";
+import { isTongdaxinNamedActionName, resolveTongdaxinNamedToolCall } from "./named-action-routing.ts";
 
 const service = "tongdaxin";
 const endpoint = new URL("https://txmcp.tdx.com.cn:3001/txmcp");
@@ -26,7 +28,7 @@ interface TongdaxinTool {
   inputSchema: Record<string, unknown>;
 }
 
-const handlers: ProviderActionHandlers<typeof service, ProviderRuntimeHandler<ApiKeyProviderContext>> = {
+const handlers: Record<string, ProviderRuntimeHandler<ApiKeyProviderContext>> = {
   async list_tools(_input, context) {
     return { tools: await discoverSupportedTools(context, "execute") };
   },
@@ -34,10 +36,7 @@ const handlers: ProviderActionHandlers<typeof service, ProviderRuntimeHandler<Ap
     const toolName = requiredInputString(input.toolName, "toolName");
     const argumentsValue = input.arguments === undefined ? {} : optionalRecord(input.arguments);
     if (!argumentsValue) throw new ProviderRequestError(400, "arguments must be a JSON object");
-    const tools = await discoverSupportedTools(context, "execute");
-    if (!tools.some((tool) => tool.name === toolName)) {
-      throw new ProviderRequestError(403, "The selected Tongdaxin tool is not available as read-only");
-    }
+    assertToolArgumentsSize(argumentsValue);
     const result = await withTongdaxinClient(context, "execute", (client) =>
       client.callTool(
         { name: toolName, arguments: argumentsValue },
@@ -54,6 +53,45 @@ const handlers: ProviderActionHandlers<typeof service, ProviderRuntimeHandler<Ap
     return { result: text?.type === "text" ? text.text : result.content };
   },
 };
+
+for (const actionName of Object.keys(resolveNamedHandlers())) {
+  handlers[actionName] = async (input, context) => {
+    if (!isTongdaxinNamedActionName(actionName)) throw new ProviderRequestError(400, `Unknown action: ${actionName}`);
+    const toolCall = resolveTongdaxinNamedToolCall(actionName, input);
+    assertToolArgumentsSize(toolCall.arguments);
+    const tools = await discoverSupportedTools(context, "execute");
+    const tool = tools.find((candidate) => candidate.name === toolCall.toolName);
+    if (!tool && toolCall.toolName !== "wenda_macro_query") {
+      throw new ProviderRequestError(
+        409,
+        `Tongdaxin action ${actionName} is unavailable because this connection does not expose ${toolCall.toolName}`,
+      );
+    }
+    if (
+      tool &&
+      (!supportedToolNames.has(tool.name) ||
+        tool.annotations?.readOnlyHint !== true ||
+        tool.annotations.destructiveHint === true)
+    ) {
+      throw new ProviderRequestError(
+        403,
+        `Tongdaxin MCP does not currently affirm ${tool.name} as a non-destructive read-only tool`,
+      );
+    }
+    const result = await withTongdaxinClient(context, "execute", (client) =>
+      client.callTool(
+        { name: toolCall.toolName, arguments: toolCall.arguments },
+        { timeout: requestTimeoutMs, signal: context.signal },
+      ),
+    );
+    if (!("toolResult" in result) && result.isError) {
+      throw new ProviderRequestError(502, `Tongdaxin MCP tool ${toolCall.toolName} returned an error`, result);
+    }
+    const normalized =
+      "toolResult" in result ? result : (result.structuredContent ?? extractTextContent(result.content));
+    return normalizeTongdaxinNamedActionOutput(actionName, normalized);
+  };
+}
 
 export const executors: ProviderExecutors = defineApiKeyProviderExecutors(service, handlers, {
   skipDnsValidation: true,
@@ -85,19 +123,12 @@ async function discoverSupportedTools(
   const result = await withTongdaxinClient(context, phase, (client) =>
     client.listTools({}, { timeout: requestTimeoutMs, signal: context.signal }),
   );
-  return result.tools
-    .filter(
-      (tool) =>
-        supportedToolNames.has(tool.name) &&
-        tool.annotations?.readOnlyHint === true &&
-        tool.annotations.destructiveHint !== true,
-    )
-    .map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      annotations: tool.annotations,
-      inputSchema: tool.inputSchema,
-    }));
+  return result.tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    annotations: tool.annotations,
+    inputSchema: tool.inputSchema,
+  }));
 }
 
 async function withTongdaxinClient<T>(
@@ -142,4 +173,28 @@ function mapTongdaxinError(error: unknown, phase: "validate" | "execute"): unkno
     error instanceof Error ? `Tongdaxin MCP request failed: ${error.message}` : "Tongdaxin MCP request failed",
     error,
   );
+}
+
+function resolveNamedHandlers() {
+  return Object.fromEntries(
+    tongdaxinActions
+      .filter((action) => action.name !== "list_tools" && action.name !== "call_tool")
+      .map((action) => [action.name, true]),
+  );
+}
+
+function assertToolArgumentsSize(argumentsValue: Record<string, unknown>) {
+  if (new TextEncoder().encode(JSON.stringify(argumentsValue)).byteLength > 64 * 1024) {
+    throw new ProviderRequestError(400, "arguments must not exceed 65536 JSON bytes");
+  }
+}
+
+function extractTextContent(content: Array<{ type: string; text?: string }>) {
+  const text = content.find((item) => item.type === "text")?.text;
+  if (text === undefined) return content;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
 }

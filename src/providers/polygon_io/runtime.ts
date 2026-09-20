@@ -13,10 +13,14 @@ import {
 } from "../../core/cast.ts";
 import {
   defineApiKeyProviderExecutors,
+  getProviderActionHandler,
+  mapProviderActionHandlers,
   ProviderRequestError,
   providerUserAgent,
   requiredInputString,
 } from "../provider-runtime.ts";
+import { polygonIoActions } from "./actions.ts";
+import { executeExpandedPolygonIoAction, expandedPolygonIoActionNames } from "./expanded-runtime.ts";
 
 const service = "polygon_io";
 export const polygonIoApiBaseUrl = "https://api.massive.com";
@@ -25,7 +29,7 @@ type PolygonIoPhase = "validate" | "execute";
 type PolygonIoQueryValue = string | number | boolean | undefined;
 type PolygonIoActionHandler = (input: Record<string, unknown>, context: ApiKeyProviderContext) => Promise<unknown>;
 
-export const polygonIoActionHandlers: ProviderActionHandlers<"polygon_io", PolygonIoActionHandler> = {
+const baseActionHandlers: Partial<ProviderActionHandlers<"polygon_io", PolygonIoActionHandler>> = {
   async list_tickers(input, context) {
     const response = optionalRecord(
       await requestPolygonIoJson(context, "/v3/reference/tickers", {
@@ -120,6 +124,25 @@ export const polygonIoActionHandlers: ProviderActionHandlers<"polygon_io", Polyg
     return normalizeMarketStatus(response);
   },
 };
+
+export const polygonIoActionHandlers: ProviderActionHandlers<"polygon_io", PolygonIoActionHandler> =
+  mapProviderActionHandlers(service, polygonIoActions, (_action, name) => {
+    const baseHandler = getProviderActionHandler(baseActionHandlers, name);
+    if (baseHandler) return baseHandler;
+    if (!expandedPolygonIoActionNames.has(name)) {
+      return async (): Promise<unknown> => {
+        throw new ProviderRequestError(500, `polygon_io action is not implemented: ${name}`);
+      };
+    }
+    return (input, context) =>
+      executeExpandedPolygonIoAction({
+        actionName: name,
+        input,
+        apiKey: context.apiKey,
+        fetcher: context.fetcher,
+        requestJson: ({ path, query, phase }) => requestPolygonIoJson(context, path, query, phase),
+      });
+  });
 
 export const executors: ProviderExecutors = defineApiKeyProviderExecutors(service, polygonIoActionHandlers);
 
