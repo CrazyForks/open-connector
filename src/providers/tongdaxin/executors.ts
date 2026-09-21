@@ -37,7 +37,7 @@ const handlers: Record<string, ProviderRuntimeHandler<ApiKeyProviderContext>> = 
     const argumentsValue = input.arguments === undefined ? {} : optionalRecord(input.arguments);
     if (!argumentsValue) throw new ProviderRequestError(400, "arguments must be a JSON object");
     assertToolArgumentsSize(argumentsValue);
-    const result = await withTongdaxinClient(context, "execute", (client) =>
+    const result = await withTongdaxinClient(context, "execute", false, (client) =>
       client.callTool(
         { name: toolName, arguments: argumentsValue },
         { timeout: requestTimeoutMs, signal: context.signal },
@@ -78,7 +78,7 @@ for (const actionName of Object.keys(resolveNamedHandlers())) {
         `Tongdaxin MCP does not currently affirm ${tool.name} as a non-destructive read-only tool`,
       );
     }
-    const result = await withTongdaxinClient(context, "execute", (client) =>
+    const result = await withTongdaxinClient(context, "execute", true, (client) =>
       client.callTool(
         { name: toolCall.toolName, arguments: toolCall.arguments },
         { timeout: requestTimeoutMs, signal: context.signal },
@@ -120,7 +120,7 @@ async function discoverSupportedTools(
   context: ApiKeyProviderContext,
   phase: "validate" | "execute",
 ): Promise<TongdaxinTool[]> {
-  const result = await withTongdaxinClient(context, phase, (client) =>
+  const result = await withTongdaxinClient(context, phase, true, (client) =>
     client.listTools({}, { timeout: requestTimeoutMs, signal: context.signal }),
   );
   return result.tools.map((tool) => ({
@@ -134,6 +134,7 @@ async function discoverSupportedTools(
 async function withTongdaxinClient<T>(
   context: ApiKeyProviderContext,
   phase: "validate" | "execute",
+  retryOnSessionNotFound: boolean,
   run: (client: Client) => Promise<T>,
 ): Promise<T> {
   return withMcpClient(
@@ -147,6 +148,7 @@ async function withTongdaxinClient<T>(
       },
       redirect: "error",
       signal: context.signal,
+      retryOnSessionNotFound,
       mapError: (error) => mapTongdaxinError(error, phase),
     },
     run,

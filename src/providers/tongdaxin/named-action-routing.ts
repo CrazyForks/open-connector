@@ -339,7 +339,7 @@ function capitalAndTradingArguments(input: NamedActionInput) {
         extra: input.date,
       };
     case "BLOCK_TRADE_INTENTION":
-      return dataSection("TdxSharePCCW.tdxf10_gg_iyds", code, "yxsbxx");
+      return dataSection("TdxSharePCCW.tdxf10_gg_jyds", code, "yxsbxx");
     case "MARGIN_TRADING":
       return dataSection("TdxSharePCCW.tdxf10_gg_jyds", code, "rzrq");
     case "REFINANCING":

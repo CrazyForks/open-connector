@@ -84,12 +84,7 @@ const searchOutputSchema = s.object("A normalized Tongdaxin current-information 
   data: s.nullable(s.unknown("The provider-defined search rows returned by Wenda, or null when unavailable.")),
   result: rawResultSchema,
 });
-const f10OutputSchema = s.object("A normalized Tongdaxin F10 result.", {
-  ok: s.nullableBoolean("Whether the underlying F10 request reported success."),
-  summary: s.nullableString("The structured result summary, or null when unavailable."),
-  tables: s.array("The formatted F10 result tables.", looseRowSchema),
-  result: rawResultSchema,
-});
+const f10OutputSchema = s.unknown("The transformed F10 data returned by Tongdaxin, preserved as any JSON value.");
 
 function defineReadAction(
   name: string,

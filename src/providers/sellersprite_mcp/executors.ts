@@ -113,7 +113,9 @@ function normalize(result: ToolResult): unknown {
       )
     )
       throw new ProviderRequestError(401, message, envelope);
-    if (envelope.code === "ERROR_VISIT_MAX") throw new ProviderRequestError(429, message, envelope);
+    if (envelope.code === "ERROR_VISIT_MAX" || envelope.code === "ERROR_MAXIMUM_ACCESS_PER_MINUTE") {
+      throw new ProviderRequestError(429, message, envelope);
+    }
     if (envelope.code === "ERROR_AUTH_ERROR") throw new ProviderRequestError(403, message, envelope);
     if (envelope.code === "ERROR_PARAM") throw new ProviderRequestError(400, message, envelope);
     throw new ProviderRequestError(502, message, envelope);

@@ -48,7 +48,7 @@ export function normalizeTongdaxinNamedActionOutput(actionName: string, result: 
     case "get_board_and_industry_data":
     case "get_hot_topics":
     case "get_hk_financials":
-      return normalizeF10(resultObject, result);
+      return normalizeF10(resultObject);
     default:
       return assertNever(actionName);
   }
@@ -121,15 +121,9 @@ function normalizeSearch(resultObject: Record<string, unknown>, result: unknown)
   };
 }
 
-function normalizeF10(resultObject: Record<string, unknown>, result: unknown) {
+function normalizeF10(resultObject: Record<string, unknown>) {
   const response = requiredResponseRecord(resultObject.response, "Tongdaxin F10 response");
-  const transformed = requiredResponseRecord(response.transformed, "Tongdaxin F10 transformed data");
-  return {
-    ok: optionalBoolean(resultObject.ok) ?? optionalBoolean(response.ok) ?? null,
-    summary: asStringOrNull(transformed.summary ?? resultObject.summary),
-    tables: requireResponseObjectArray(transformed.tables, "Tongdaxin F10 tables"),
-    result,
-  };
+  return response.transformed ?? null;
 }
 
 function assertNever(value: string): never {

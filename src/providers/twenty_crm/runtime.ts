@@ -96,10 +96,11 @@ async function listRecords(
   input: Record<string, unknown>,
   context: ApiKeyProviderContext,
 ): Promise<Record<string, unknown>> {
+  const objectNamePlural = readRequiredString(input.objectNamePlural, "objectNamePlural");
   const payload = await requestTwentyCrmJson(
     {
       method: "GET",
-      path: `/rest/${encodeObjectName(readRequiredString(input.objectNamePlural, "objectNamePlural"))}`,
+      path: `/rest/${encodeObjectName(objectNamePlural)}`,
       query: compactObject({
         limit: optionalInteger(input.limit),
         starting_after: readOptionalString(input.startingAfter),
@@ -113,8 +114,9 @@ async function listRecords(
   );
   const record = requireProviderObject(payload, "Twenty CRM list records response");
 
+  const data = requireProviderObject(record.data, "Twenty CRM data");
   return {
-    records: readArray(record, "data").map((item) => requireProviderObject(item, "Twenty CRM record")),
+    records: readArray(data, objectNamePlural).map((item) => requireProviderObject(item, "Twenty CRM record")),
     pageInfo: optionalRecord(record.pageInfo) ?? {},
     raw: record,
   };
