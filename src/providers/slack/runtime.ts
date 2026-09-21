@@ -967,10 +967,10 @@ function readSlackTokenKind(accessToken: string, metadata: Record<string, unknow
   if (rawTokenType == "user") {
     return "user";
   }
-  if (accessToken.startsWith("xoxb-")) {
+  if (accessToken.startsWith("xoxb-") || accessToken.startsWith("xoxe.xoxb-")) {
     return "bot";
   }
-  if (accessToken.startsWith("xoxp-")) {
+  if (accessToken.startsWith("xoxp-") || accessToken.startsWith("xoxe.xoxp-")) {
     return "user";
   }
   return undefined;

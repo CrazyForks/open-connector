@@ -30,6 +30,18 @@ describe("Slack authorization paths", () => {
       accessToken: "xoxp-user-token",
       execute: slackbotExecutors["slackbot.list_channels"]!,
     },
+    {
+      actionId: "slack.list_channels",
+      rawTokenType: "Bearer",
+      accessToken: "xoxe.xoxb-rotated-bot-token",
+      execute: slackExecutors["slack.list_channels"]!,
+    },
+    {
+      actionId: "slackbot.list_channels",
+      rawTokenType: "Bearer",
+      accessToken: "xoxe.xoxp-rotated-user-token",
+      execute: slackbotExecutors["slackbot.list_channels"]!,
+    },
   ])("rejects the other authorization path for $actionId", async ({ rawTokenType, accessToken, execute }) => {
     const context: ExecutionContext = {
       getCredential: async () => oauthCredential(rawTokenType, {}, accessToken),
@@ -59,6 +71,18 @@ describe("Slack authorization paths", () => {
       rawTokenType: "Bearer",
       accessToken: "xoxp-user-token",
       execute: slackExecutors["slack.open_conversation"]!,
+    },
+    {
+      actionId: "slack.open_conversation",
+      rawTokenType: "Bearer",
+      accessToken: "xoxe.xoxp-rotated-user-token",
+      execute: slackExecutors["slack.open_conversation"]!,
+    },
+    {
+      actionId: "slackbot.open_conversation",
+      rawTokenType: "Bearer",
+      accessToken: "xoxe.xoxb-rotated-bot-token",
+      execute: slackbotExecutors["slackbot.open_conversation"]!,
     },
   ])("allows the matching authorization path for $actionId", async ({ rawTokenType, accessToken, execute }) => {
     const context: ExecutionContext = {
@@ -93,6 +117,18 @@ describe("Slack authorization paths", () => {
         scope: "channels:read,chat:write,search:read",
       },
       scopes: ["channels:read", "chat:write", "search:read"],
+    },
+    {
+      tokenType: "Bearer",
+      accessToken: "xoxe.xoxp-rotated-user-token",
+      metadata: { scope: "channels:read,channels:history" },
+      scopes: ["channels:read", "channels:history"],
+    },
+    {
+      tokenType: "Bearer",
+      accessToken: "xoxe.xoxb-rotated-bot-token",
+      metadata: { scope: "channels:read", authed_user: { scope: "search:read" } },
+      scopes: ["channels:read"],
     },
     {
       tokenType: "bot",
