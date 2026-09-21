@@ -269,6 +269,25 @@ async function getMetadata(input: Record<string, unknown>, accessToken: string, 
   };
 }
 
+/**
+ * Serialize a `Dropbox-API-Arg` header value.
+ *
+ * Dropbox requires this header to be ASCII: its own docs say `0x7F` and every
+ * non-ASCII character must be escaped as `\uXXXX`, which is also the range the
+ * official JS SDK escapes. `JSON.stringify` does not escape, and Node's `Headers`
+ * refuses a value outside ByteString, so a path containing any non-ASCII
+ * character threw `TypeError: Cannot convert argument to a ByteString` inside
+ * the runtime BEFORE the request was made. `provider-runtime.ts`'s fallback
+ * then reported it as a bare `internal_error`, discarding the cause.
+ *
+ * Measured 2026-09-18 against a real account: `/kkndme 天涯.pdf` failed in 1ms
+ * with no network call, while ASCII-path siblings downloaded in ~400ms. Dropbox
+ * itself accepts either spelling on the wire; only the header build was broken.
+ */
+function dropboxApiArg(arg: unknown): string {
+  return JSON.stringify(arg).replace(/[\u007f-\uffff]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
 async function downloadFile(input: Record<string, unknown>, context: ActionContext) {
   const { accessToken, fetcher, transitFiles } = context;
   if (!transitFiles) {
@@ -278,7 +297,7 @@ async function downloadFile(input: Record<string, unknown>, context: ActionConte
     method: "POST",
     headers: {
       ...dropboxAuthHeaders(accessToken),
-      "Dropbox-API-Arg": JSON.stringify({
+      "Dropbox-API-Arg": dropboxApiArg({
         path: requireString(input.path, "dropbox download path"),
       }),
     },
@@ -316,7 +335,7 @@ async function uploadFile(input: Record<string, unknown>, accessToken: string, f
     headers: {
       ...dropboxAuthHeaders(accessToken),
       "Content-Type": source.mimeType || "application/octet-stream",
-      "Dropbox-API-Arg": JSON.stringify(arg),
+      "Dropbox-API-Arg": dropboxApiArg(arg),
     },
     body: Buffer.from(source.bytes),
   });
@@ -597,7 +616,7 @@ async function getSharedLinkFile(input: Record<string, unknown>, context: Action
     method: "POST",
     headers: {
       ...dropboxAuthHeaders(accessToken),
-      "Dropbox-API-Arg": JSON.stringify(arg),
+      "Dropbox-API-Arg": dropboxApiArg(arg),
     },
     signal: context.signal,
   });
