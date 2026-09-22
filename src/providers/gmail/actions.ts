@@ -187,6 +187,33 @@ const labelMutation = (): Record<string, JsonSchema> => ({
 
 export const gmailActions: ActionDefinition[] = [
   action({
+    name: "download_attachment",
+    operationType: "read",
+    description:
+      "Decode a Gmail attachment into a downloadable transit file with bounded memory. Requires the filesystem transit backend; the configured file size limit still applies.",
+    requiredScopes: gmailReadScopes,
+    properties: withUser({
+      messageId,
+      attachmentId: s.string({ minLength: 1, description: "Attachment ID from the message part body." }),
+      fileName: s.string({ description: "Download name from the message part; defaults to attachment." }),
+      mimeType: s.string({ description: "MIME type from the message part; defaults to application/octet-stream." }),
+    }),
+    required: ["messageId", "attachmentId"],
+    outputSchema: s.object(
+      {
+        fileId: s.string(),
+        downloadUrl: s.string(),
+        sizeBytes: s.integer(),
+        name: s.string(),
+        mimeType: s.string(),
+      },
+      {
+        required: ["fileId", "downloadUrl", "sizeBytes", "name", "mimeType"],
+        description: "Completed transit file. Download bytes from downloadUrl; normal transit expiry applies.",
+      },
+    ),
+  }),
+  action({
     name: "search_threads",
     operationType: "read",
     description:

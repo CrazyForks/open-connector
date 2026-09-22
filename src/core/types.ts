@@ -336,9 +336,19 @@ export interface TransitFileRead {
   mimeType: string;
 }
 
+/** A byte stream consumed with backpressure; failed or cancelled writes must leave no file behind. */
+export interface TransitFileStream {
+  body: ReadableStream<Uint8Array>;
+  name: string;
+  mimeType: string;
+  signal?: AbortSignal;
+}
+
 export interface TransitFileStore {
   readonly maxBytes: number;
   create(file: File): Promise<TransitFileUpload>;
+  /** Available only on backends that can store unknown-length streams without buffering the file. */
+  createFromStream?(file: TransitFileStream): Promise<TransitFileUpload>;
   read(fileId: string): Promise<TransitFileRead>;
   delete(fileId: string): Promise<boolean>;
 }

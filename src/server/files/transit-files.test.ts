@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, unlink, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat, unlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,6 +12,68 @@ afterEach(async () => {
 });
 
 describe("TransitFileService", () => {
+  it("cancels a stalled source and removes the partial write when its signal aborts", async () => {
+    const { rootDir, service } = await createService();
+    const abort = new AbortController();
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(64 * 1024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const pending = service.createFromStream({
+      body,
+      name: "partial.bin",
+      mimeType: "application/octet-stream",
+      signal: abort.signal,
+    });
+    await expect
+      .poll(async () => {
+        const entries = await readdir(rootDir).catch(() => []);
+        const name = entries.find((entry) => entry.endsWith(".tmp"));
+        return name ? (await stat(join(rootDir, name))).size : 0;
+      })
+      .toBeGreaterThan(0);
+    abort.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancelled).toBe(true);
+    expect(await readdir(rootDir)).toEqual([]);
+  });
+
+  it("enforces the streaming size limit itself and cancels unread input", async () => {
+    const { rootDir, service } = await createService();
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(64 * 1024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    await expect(
+      service.createFromStream({ body, name: "large.bin", mimeType: "application/octet-stream" }),
+    ).rejects.toMatchObject({ status: 413 });
+    expect(cancelled).toBe(true);
+    expect(await readdir(rootDir)).toEqual([]);
+  });
+
+  it("cancels the input if storage fails before the write starts", async () => {
+    const { rootDir, service } = await createService();
+    await writeFile(rootDir, "not a directory");
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    await expect(service.createFromStream({ body, name: "file", mimeType: "text/plain" })).rejects.toThrow();
+    expect(cancelled).toBe(true);
+  });
+
   it("treats an expired file as not found and removes it with its side-car", async () => {
     const { rootDir, service } = await createService();
     const read = await service.create(new File(["expired read"], "read.pdf", { type: "application/pdf" }));

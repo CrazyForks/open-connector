@@ -8,6 +8,7 @@ import type { ProviderActionHandlers } from "../provider-runtime.ts";
 import type { GmailDraftResource, GmailMessageResource, GmailThreadResource } from "./message.ts";
 
 import { looseArray, optionalRecord, optionalString } from "../../core/cast.ts";
+import { encodePathSegment } from "../../core/request.ts";
 import { googleBearerProxyAuth, googleServiceAccountValidator, resolveGoogleAccessToken } from "../google-auth.ts";
 import {
   defineProviderExecutors,
@@ -15,7 +16,10 @@ import {
   ProviderRequestError,
   readProviderErrorTextBody,
   readProviderJsonBody,
+  requiredInputString,
+  runProviderRequest,
 } from "../provider-runtime.ts";
+import { decodeGmailAttachment } from "./attachment-stream.ts";
 import {
   buildRecipients,
   encodeMimeMessage,
@@ -34,17 +38,49 @@ import { gmailOAuthScopes } from "./scopes.ts";
 const service = "gmail";
 const gmailApiBaseUrl = "https://gmail.googleapis.com/gmail/v1";
 const detailHydrationBatchSize = 10;
+// Attachments may reach Gmail's 25 MB cap, and the base64 JSON envelope is a third larger again;
+// the default 30 s request budget covers fetch, decode, and disk write, so give this transfer longer.
+const attachmentDownloadTimeoutMs = 120_000;
 const defaultFetchEmailsMaxResults = 20;
 
 interface ActionContext {
   userId: string;
   accessToken: string;
   fetcher: typeof fetch;
+  transitFiles?: ExecutionContext["transitFiles"];
+  signal?: AbortSignal;
 }
 
 type ActionHandler = (input: Record<string, unknown>, context: ActionContext) => Promise<unknown>;
 
 export const gmailActionHandlers: ProviderActionHandlers<typeof service, ActionHandler> = {
+  async download_attachment(input, context) {
+    const { transitFiles, fetcher, accessToken } = context;
+    if (!transitFiles?.createFromStream) {
+      throw new ProviderRequestError(
+        400,
+        "Gmail attachment downloads require a streaming transit file backend (filesystem).",
+      );
+    }
+    const messageId = requiredInputString(input.messageId, "messageId");
+    const attachmentId = requiredInputString(input.attachmentId, "attachmentId");
+    const userId = optionalString(input.userId) ?? context.userId;
+    const url = `${gmailUserUrl(userId, "messages")}/${encodePathSegment(messageId)}/attachments/${encodePathSegment(attachmentId)}?fields=data,size`;
+    return runProviderRequest(
+      { signal: context.signal, label: "Gmail attachment", timeoutMs: attachmentDownloadTimeoutMs },
+      async (signal) => {
+        const response = await fetcher(url, { headers: { authorization: `Bearer ${accessToken}` }, signal });
+        await assertGmailResponse(response);
+        if (!response.body) throw new ProviderRequestError(502, "Gmail attachment response has no body");
+        return transitFiles.createFromStream!({
+          body: decodeGmailAttachment(response.body, transitFiles.maxBytes),
+          name: optionalString(input.fileName) ?? "attachment",
+          mimeType: optionalString(input.mimeType) ?? "application/octet-stream",
+          signal,
+        });
+      },
+    );
+  },
   async search_threads(input, { userId, accessToken, fetcher }) {
     const output = await listThreads(input, userId, accessToken, fetcher);
     return {
@@ -214,7 +250,13 @@ export const executors: ProviderExecutors = defineProviderExecutors<ActionContex
       fetcher,
       signal: context.signal,
     });
-    return { userId: "me", accessToken: resolved.accessToken, fetcher };
+    return {
+      userId: "me",
+      accessToken: resolved.accessToken,
+      fetcher,
+      transitFiles: context.transitFiles,
+      signal: context.signal,
+    };
   },
 });
 

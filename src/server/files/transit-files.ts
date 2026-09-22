@@ -1,13 +1,13 @@
-import type { TransitFileRead, TransitFileUpload } from "../../core/types.ts";
+import type { TransitFileRead, TransitFileStream, TransitFileUpload } from "../../core/types.ts";
 import type { IStagedTransitFileService, StagedTransitFile, TransitFileDescriptor } from "./transit-file-store.ts";
 import type { Stats } from "node:fs";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
-import { once } from "node:events";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { finished } from "node:stream/promises";
+import { pipeline } from "node:stream/promises";
 import {
   assertFileSize,
   assertSafeFileId,
@@ -44,21 +44,35 @@ export class TransitFileService implements IStagedTransitFileService {
 
   async create(file: File): Promise<TransitFileUpload> {
     assertFileSize(file.size, this.maxBytes);
-    await this.cleanupExpired();
-    await mkdir(this.rootDir, { recursive: true });
+    return this.createFromStream({ body: file.stream(), name: file.name, mimeType: file.type });
+  }
 
+  async createFromStream(file: TransitFileStream): Promise<TransitFileUpload> {
     const fileId = `${randomHex(16)}${safeExtension(file.name)}`;
     const path = join(this.rootDir, fileId);
     const tempPath = `${path}.tmp`;
-    const sizeBytes = await this.writeFile(file, tempPath);
-    await rename(tempPath, path);
     const metadata = normalizeDescriptor({
       name: file.name || fileId,
-      mimeType: file.type || contentTypeFromFileId(fileId),
+      mimeType: file.mimeType || contentTypeFromFileId(fileId),
     });
-    await writeFile(metadataPath(path), JSON.stringify(metadata), { flag: "wx" });
-
-    return uploadResult(this.publicOrigin, fileId, { ...metadata, sizeBytes });
+    try {
+      file.signal?.throwIfAborted();
+      await this.cleanupExpired();
+      const sizeBytes = await this.writeStream(file, tempPath);
+      file.signal?.throwIfAborted();
+      await writeFile(metadataPath(path), JSON.stringify(metadata), { flag: "wx", signal: file.signal });
+      await rename(tempPath, path);
+      file.signal?.throwIfAborted();
+      return uploadResult(this.publicOrigin, fileId, { ...metadata, sizeBytes });
+    } catch (error) {
+      if (!file.body.locked) {
+        await file.body.cancel(error).catch(() => undefined);
+      }
+      await Promise.all(
+        [tempPath, path, metadataPath(path)].map((filePath) => unlink(filePath).catch(() => undefined)),
+      );
+      throw error;
+    }
   }
 
   async createFromPath(file: StagedTransitFile): Promise<TransitFileUpload> {
@@ -153,33 +167,22 @@ export class TransitFileService implements IStagedTransitFileService {
     }
   }
 
-  private async writeFile(file: File, tempPath: string): Promise<number> {
-    const writer = createWriteStream(tempPath, { flags: "wx" });
-    const reader = file.stream().getReader();
+  private async writeStream(file: TransitFileStream, tempPath: string): Promise<number> {
     let sizeBytes = 0;
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
+    const maxBytes = this.maxBytes;
+    await pipeline(
+      Readable.fromWeb(file.body as NodeReadableStream<Uint8Array>),
+      async function* (source) {
+        for await (const chunk of source) {
+          sizeBytes += chunk.byteLength;
+          assertFileSize(sizeBytes, maxBytes);
+          yield chunk;
         }
-        sizeBytes += value.byteLength;
-        assertFileSize(sizeBytes, this.maxBytes);
-        if (!writer.write(value)) {
-          await once(writer, "drain");
-        }
-      }
-      writer.end();
-      await finished(writer);
-      return sizeBytes;
-    } catch (error) {
-      writer.destroy();
-      await unlink(tempPath).catch(() => undefined);
-      throw error;
-    } finally {
-      reader.releaseLock();
-    }
+      },
+      createWriteStream(tempPath, { flags: "wx" }),
+      { signal: file.signal },
+    );
+    return sizeBytes;
   }
 }
 
