@@ -22,11 +22,15 @@ export interface OAuthTokenResult {
   refreshToken?: string;
   tokenType: string;
   expiresAt?: string;
+  /** Provider-owned secret state that must follow token rotation. */
+  providerSecret?: Record<string, unknown>;
   metadata: Record<string, unknown>;
 }
 
 export interface OAuthCodeExchangeInput {
   code: string;
+  /** Provider callback parameters other than code and state. */
+  callbackParameters?: Record<string, string>;
   clientConfig: OAuthClientConfig;
   redirectUri: string;
   tokenUrl: string;
@@ -38,12 +42,21 @@ export interface OAuthCodeExchangeInput {
 export interface OAuthAccessTokenRefreshInput {
   refreshToken: string;
   clientConfig: OAuthClientConfig;
+  /** Metadata stored with the existing connection. */
+  metadata: Record<string, unknown>;
+  /** Provider-owned secret state stored with the existing connection. */
+  providerSecret?: Record<string, unknown>;
   fetcher: typeof fetch;
   createError(message: string): Error;
 }
 
 /** Provider-local overrides for token protocols that do not follow the standard OAuth request shape. */
 export interface ProviderOAuthRuntime {
+  buildAuthorizationUrl?(input: {
+    authorizationUrl: URL;
+    clientConfig: OAuthClientConfig;
+    now: Date;
+  }): string | Promise<string>;
   exchangeCode?(input: OAuthCodeExchangeInput): Promise<OAuthTokenResult>;
   refreshAccessToken?(input: OAuthAccessTokenRefreshInput): Promise<OAuthTokenResult>;
 }

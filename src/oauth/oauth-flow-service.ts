@@ -239,8 +239,13 @@ export class OAuthFlowService {
       authorizationUrl.searchParams.set("code_challenge_method", auth.pkce?.method ?? "S256");
     }
 
+    const providerOAuth = await this.providerLoader.loadProviderOAuthRuntime?.(service);
+    const resolvedAuthorizationUrl = providerOAuth?.buildAuthorizationUrl
+      ? await providerOAuth.buildAuthorizationUrl({ authorizationUrl, clientConfig: config, now })
+      : authorizationUrl.toString();
+
     return {
-      authorizationUrl: authorizationUrl.toString(),
+      authorizationUrl: resolvedAuthorizationUrl,
       pending,
     };
   }
@@ -276,6 +281,7 @@ export class OAuthFlowService {
       if (providerOAuth?.exchangeCode) {
         tokenResponse = await providerOAuth.exchangeCode({
           code: input.code,
+          callbackParameters: input.callbackParameters,
           clientConfig: config,
           redirectUri,
           tokenUrl,
@@ -301,6 +307,7 @@ export class OAuthFlowService {
         });
       }
       const refreshParameters = readCallbackParameters(auth.tokenRequestCallbackParameters, input.callbackParameters);
+      const providerSecret = mergeOAuthProviderSecret(tokenResponse.providerSecret, refreshParameters);
       const oauthCredential = {
         authType: "oauth2" as const,
         ...tokenResponse,
@@ -309,8 +316,7 @@ export class OAuthFlowService {
           displayName: "OAuth Credential",
           grantedScopes: request ? [] : (pending.authorizationScopes ?? []),
         },
-        providerSecret:
-          Object.keys(refreshParameters).length > 0 ? { oauthRefreshParameters: refreshParameters } : undefined,
+        providerSecret,
         metadata: {
           ...tokenResponse.metadata,
           // Bind the stored credential to the callback that completed this consent.
@@ -389,6 +395,19 @@ export class OAuthFlowService {
     }
     return this.clientConfigs.normalizeConfig(service, input);
   }
+}
+
+function mergeOAuthProviderSecret(
+  providerSecret: Record<string, unknown> | undefined,
+  refreshParameters: Record<string, string>,
+): Record<string, unknown> | undefined {
+  if (Object.keys(refreshParameters).length === 0) {
+    return providerSecret;
+  }
+  return {
+    ...providerSecret,
+    oauthRefreshParameters: refreshParameters,
+  };
 }
 
 function setAuthorizationParam(
