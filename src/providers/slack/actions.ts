@@ -721,6 +721,23 @@ export const slackActions: ActionDefinition[] = [
     ),
   }),
   action({
+    name: "download_file",
+    operationType: "read",
+    description: "Download a Slack-hosted file into transit storage using the connected identity's access.",
+    requiredScopes: ["files:read"],
+    inputSchema: s.requiredObject("The Slack file to download.", { fileId: fileIdSchema }),
+    outputSchema: s.requiredObject("A Slack file downloaded into transit storage.", {
+      fileId: fileIdSchema,
+      file: s.requiredObject("The downloaded file in transit storage.", {
+        fileId: s.nonEmptyString("The transit file identifier."),
+        downloadUrl: s.url("The transit URL for downloading the stored file."),
+        sizeBytes: s.nonNegativeInteger("The stored file size in bytes."),
+        name: s.nonEmptyString("The stored file name."),
+        mimeType: s.nonEmptyString("The stored file MIME type."),
+      }),
+    }),
+  }),
+  action({
     name: "delete_file",
     operationType: "destructive",
     description: "Delete a Slack file.",

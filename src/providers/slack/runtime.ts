@@ -7,6 +7,7 @@ import {
   compactObject,
   optionalBoolean,
   optionalInteger,
+  optionalNumber,
   optionalRecord,
   optionalString,
   requiredString,
@@ -17,7 +18,12 @@ import {
   defineProviderExecutors,
   isAbortLikeError,
   ProviderRequestError,
+  providerInputError,
+  providerResponseError,
   providerUserAgent,
+  requiredInputString,
+  requiredResponseRecord,
+  runProviderRequest,
 } from "../provider-runtime.ts";
 import { slackConversationTypes } from "./constants.ts";
 
@@ -160,6 +166,9 @@ export const slackActionHandlers: ProviderActionHandlers<"slack", SlackActionHan
   },
   get_file(input, context) {
     return slackGetFile(input, context);
+  },
+  download_file(input, context) {
+    return slackDownloadFile(input, context);
   },
   delete_file(input, context) {
     return slackDeleteFile(input, context);
@@ -788,6 +797,62 @@ async function slackGetFile(input: Record<string, unknown>, context: SlackAction
   return {
     file: normalizeFile(payload.file ?? {}),
   };
+}
+
+async function slackDownloadFile(input: Record<string, unknown>, context: SlackActionContext): Promise<unknown> {
+  const { transitFiles } = context;
+  if (!transitFiles) {
+    throw providerInputError("Slack download_file requires transit file storage");
+  }
+  const fileId = requiredInputString(input.fileId, "fileId");
+
+  return runProviderRequest({ signal: context.signal, label: "Slack file download" }, async (signal) => {
+    signal.throwIfAborted();
+    const infoUrl = slackApiUrl("files.info");
+    infoUrl.searchParams.set("file", fileId);
+    const payload = await slackGetJson<SlackPayloadError & { file?: unknown }>(infoUrl, { ...context, signal });
+    const metadata = requiredResponseRecord(payload.file, "Slack file metadata");
+    const privateUrl = optionalString(metadata.url_private_download) ?? optionalString(metadata.url_private);
+    if (metadata.is_external === true || !privateUrl) {
+      throw providerInputError("This Slack file has no downloadable Slack-hosted content");
+    }
+    const url = assertPublicHttpUrl(privateUrl, { fieldName: "Slack file URL", createError: providerResponseError });
+    // Only Slack's file origin may receive the connection's bearer token.
+    // The shared fetch guard drops it if a redirect crosses origins.
+    if (url.origin !== "https://files.slack.com") {
+      throw providerResponseError("Slack file URL must use https://files.slack.com");
+    }
+    if ((optionalNumber(metadata.size) ?? 0) > transitFiles.maxBytes) {
+      throw new ProviderRequestError(413, `Slack file download exceeds ${transitFiles.maxBytes} bytes`);
+    }
+
+    const response = await context.fetcher(url, {
+      headers: { authorization: `Bearer ${context.accessToken}`, "user-agent": providerUserAgent },
+      signal,
+    });
+    try {
+      if (!response.ok) {
+        throw new ProviderRequestError(response.status, `Slack file download failed with HTTP ${response.status}`);
+      }
+      const mimeType =
+        response.headers.get("content-type") ?? optionalString(metadata.mimetype) ?? "application/octet-stream";
+      // Slack can return a sign-in page instead of the requested bytes.
+      if (mimeType.split(";")[0]?.trim().toLowerCase() === "text/html" && metadata.mimetype !== "text/html") {
+        throw providerResponseError("Slack returned an HTML page instead of the requested file");
+      }
+      const bytes = await readBoundedResponseBytes(response, {
+        maxBytes: transitFiles.maxBytes,
+        fieldName: "Slack file download",
+        createError: (message) => new ProviderRequestError(413, message),
+      });
+      signal.throwIfAborted();
+      const name = optionalString(metadata.name) ?? fileId;
+      const file = await transitFiles.create(new File([Uint8Array.from(bytes)], name, { type: mimeType }));
+      return { fileId, file };
+    } finally {
+      await response.body?.cancel().catch(() => undefined);
+    }
+  });
 }
 
 async function slackDeleteFile(input: Record<string, unknown>, context: SlackActionContext): Promise<unknown> {
