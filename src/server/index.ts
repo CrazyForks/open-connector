@@ -3,6 +3,7 @@ import type { ServerType } from "@hono/node-server";
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { setGlobalProxyFromEnv } from "node:http";
 import { join } from "node:path";
 import { defaultLazySchemaCacheFiles } from "../catalog-lazy-schemas.ts";
 import { parseActionPolicyList } from "../core/action-policy.ts";
@@ -15,6 +16,8 @@ import { resolveServerAssets } from "./server-assets.ts";
 import { createDirectoryMigrationSource } from "./storage/migration-source.ts";
 import { migratePostgresRuntimeDatabase, sqliteMigrationsNotice } from "./storage/node-runtime-database.ts";
 import { DEFAULT_RUN_LIMIT } from "./storage/runtime-store.ts";
+
+setGlobalProxyFromEnv();
 
 const port = Number(process.env.PORT ?? 3000);
 const hostname = process.env.HOST ?? "127.0.0.1";
