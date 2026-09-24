@@ -9,6 +9,9 @@ const expectedOAuthScopes = [
   "https://www.googleapis.com/auth/calendar.settings.readonly",
   "https://www.googleapis.com/auth/calendar.acls",
   "https://www.googleapis.com/auth/calendar.acls.readonly",
+  "openid",
+  "email",
+  "profile",
 ];
 
 describe("Google Calendar provider definition", () => {

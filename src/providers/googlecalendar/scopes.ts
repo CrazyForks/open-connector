@@ -5,6 +5,9 @@ export const googleCalendarCalendarListScope = "https://www.googleapis.com/auth/
 export const googleCalendarSettingsReadonlyScope = "https://www.googleapis.com/auth/calendar.settings.readonly";
 export const googleCalendarAclsScope = "https://www.googleapis.com/auth/calendar.acls";
 export const googleCalendarAclsReadonlyScope = "https://www.googleapis.com/auth/calendar.acls.readonly";
+export const googleOpenIdScope = "openid";
+export const googleEmailScope = "email";
+export const googleProfileScope = "profile";
 
 export const googlecalendarReadScopes: string[] = [googleCalendarReadonlyScope];
 export const googlecalendarEventsWriteScopes: string[] = [googleCalendarEventsScope];
@@ -15,7 +18,6 @@ export const googlecalendarCalendarsWriteScopes: string[] = [
 export const googlecalendarSettingsReadScopes: string[] = [googleCalendarSettingsReadonlyScope];
 export const googlecalendarAclReadScopes: string[] = [googleCalendarAclsReadonlyScope];
 export const googlecalendarAclWriteScopes: string[] = [googleCalendarAclsScope];
-
 export const googlecalendarOAuthScopes: string[] = [
   googleCalendarReadonlyScope,
   googleCalendarEventsScope,
@@ -24,4 +26,7 @@ export const googlecalendarOAuthScopes: string[] = [
   googleCalendarSettingsReadonlyScope,
   googleCalendarAclsScope,
   googleCalendarAclsReadonlyScope,
+  googleOpenIdScope,
+  googleEmailScope,
+  googleProfileScope,
 ];
