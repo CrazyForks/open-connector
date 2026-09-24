@@ -579,6 +579,11 @@ export async function readProviderProxyResponse(
 }
 
 export async function readProviderProxyErrorMessage(response: Response, fallbackMessage: string): Promise<string> {
+  // An unfollowed redirect's body usually echoes its `Location`, which may carry a signed target URL.
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel().catch(() => undefined);
+    return fallbackMessage;
+  }
   const bytes = await readBoundedResponseBytes(response, {
     maxBytes: defaultProviderProxyMaxResponseBytes,
     fieldName: "proxy error response",
@@ -688,7 +693,8 @@ export function defineProviderProxy(input: ProviderProxyDefinition): ProviderPro
 
         const response = await egressFetch(url, init);
         if (!response.ok) {
-          if (input.readError) {
+          // A provider error parser would surface an unfollowed redirect's body; the shared reader withholds it.
+          if (input.readError && (response.status < 300 || response.status >= 400)) {
             throw await input.readError(response);
           }
           throw new ProviderRequestError(
@@ -1239,7 +1245,8 @@ export function toProviderExecutionError(error: unknown, fallbackMessage: string
             ? "authorization_failed"
             : error.status === 429
               ? "rate_limited"
-              : error.status < 500
+              : // A 3xx is an upstream redirect that `redirect: "manual"` surfaced unfollowed, not bad input.
+                error.status < 500 && (error.status < 300 || error.status >= 400)
                 ? "invalid_input"
                 : "provider_error"),
         message: error.message,
