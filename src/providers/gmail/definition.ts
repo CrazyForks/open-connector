@@ -1,7 +1,7 @@
 import type { ProviderDefinition } from "../../core/types.ts";
 
 import { gmailActions } from "./actions.ts";
-import { gmailOAuthScopes } from "./scopes.ts";
+import { gmailAuthorizableScopes } from "./scopes.ts";
 
 const service = "gmail";
 
@@ -18,7 +18,7 @@ export const provider: ProviderDefinition = {
       type: "oauth2",
       authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
       tokenUrl: "https://oauth2.googleapis.com/token",
-      scopes: gmailOAuthScopes,
+      scopes: gmailAuthorizableScopes,
       tokenEndpointAuthMethod: "client_secret_post",
       authorizationParams: {
         access_type: "offline",
