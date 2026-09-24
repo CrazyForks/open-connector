@@ -6,7 +6,6 @@ import { ProviderRequestError } from "../provider-runtime.ts";
 import { sentryProviderScopes } from "./scopes.ts";
 
 export const sentryApiBaseUrl: string = "https://sentry.io/api/0/";
-const sentryCurrentUserUrl = `${sentryApiBaseUrl}users/me/`;
 
 type SentryJsonResponse = {
   payload: unknown;
@@ -86,8 +85,8 @@ export async function validateSentryCredential(
   grantedScopes: string[];
   metadata: Record<string, unknown>;
 }> {
-  const { payload } = await requestSentryJson(accessToken, sentryCurrentUserUrl, fetcher, {}, "validate");
-  const user = asRecord(payload);
+  const { payload } = await requestSentryJson(accessToken, sentryApiBaseUrl, fetcher, {}, "validate");
+  const user = asRecord(asRecord(payload)?.user);
   if (!user) {
     throw new ProviderRequestError(502, "sentry current user payload is invalid");
   }
@@ -104,7 +103,7 @@ export async function validateSentryCredential(
     },
     grantedScopes: sentryProviderScopes,
     metadata: compactObject({
-      validationEndpoint: "/users/me/",
+      validationEndpoint: "/",
       userId,
       username: optionalRawString(user.username),
       email: optionalRawString(user.email),
