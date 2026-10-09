@@ -314,7 +314,13 @@ export const jsonSchema = {
   },
 
   nullable(schema: JsonSchema): JsonSchema {
-    return { anyOf: [schema, { type: "null" }] };
+    const nullableSchema: JsonSchema = { anyOf: [schema, { type: "null" }] };
+    // Tool schemas and the action guide read a property's description from the
+    // property schema itself, so surface the inner description on the wrapper.
+    if (typeof schema.description === "string") {
+      nullableSchema.description = schema.description;
+    }
+    return nullableSchema;
   },
 
   ref(ref: string, options: JsonSchemaOptions = {}): JsonSchema {

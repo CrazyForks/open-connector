@@ -44,6 +44,21 @@ describe("jsonSchema.nonEmptyString", () => {
   });
 });
 
+describe("jsonSchema.nullable", () => {
+  it("keeps the inner description on the nullable wrapper", () => {
+    expect(jsonSchema.nullableString("An optional name.")).toEqual({
+      anyOf: [{ type: "string", description: "An optional name." }, { type: "null" }],
+      description: "An optional name.",
+    });
+  });
+
+  it("does not add a description when the inner schema has none", () => {
+    expect(jsonSchema.nullable(jsonSchema.integer())).toEqual({
+      anyOf: [{ type: "integer" }, { type: "null" }],
+    });
+  });
+});
+
 describe("jsonSchema.nonWhitespaceString", () => {
   it("rejects empty and whitespace-only strings", () => {
     expect(jsonSchema.nonWhitespaceString("A meaningful value.", { maxLength: 64 })).toEqual({
