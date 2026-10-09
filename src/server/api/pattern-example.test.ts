@@ -41,4 +41,9 @@ describe("samplePattern", () => {
     expect(samplePattern("^(?:a{100000}){100000}$")).toBeUndefined();
     expect(samplePattern("^(a{600}|b)$")).toBe("b");
   });
+
+  it("refuses a minimum length beyond the sample bound", () => {
+    expect(samplePattern("^a+$", { minLength: 513 })).toBeUndefined();
+    expect(samplePattern("^a+$", { minLength: 512 })).toBe("a".repeat(512));
+  });
 });

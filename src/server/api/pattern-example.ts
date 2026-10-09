@@ -31,12 +31,18 @@ const maximumSampleLength = 512;
  * pattern uses constructs this sampler does not support. Lookaheads are checked against the result, without searching for a match.
  *
  * `minLength` grows unbounded quantifiers (`+`, `*`, `{n,}`) until the sample
- * reaches the schema's minimum, when the pattern allows it.
+ * reaches the schema's minimum, when the pattern allows it. A `minLength`
+ * beyond the sample bound returns `undefined` so the caller can fall back to a
+ * placeholder that still honors it.
  */
 export function samplePattern(pattern: string, options: { minLength?: number } = {}): string | undefined {
+  const requestedMinLength = options.minLength ?? 0;
+  if (requestedMinLength > maximumSampleLength) {
+    return undefined;
+  }
   try {
     const root = new PatternParser(pattern).parse();
-    const minLength = Math.min(options.minLength ?? 0, maximumSampleLength);
+    const minLength = requestedMinLength;
     const growth = new Map<PatternNode, number>();
     const budget = { remaining: maximumSampleLength };
     let sample = generateSample(root, minLength, growth, budget);
