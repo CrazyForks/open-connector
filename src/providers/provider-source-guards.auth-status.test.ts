@@ -425,7 +425,8 @@ interface ProviderSource {
 
 const providerSources: ProviderSource[] = listProviderSourceFiles(providersDirectory).map((file) => {
   const source = readFileSync(file, "utf8");
-  return { file: relative(providersDirectory, file), source, lines: source.split("\n") };
+  // `providerScopeOf` splits these paths on `/`, so a Windows backslash would make every provider shared.
+  return { file: relative(providersDirectory, file).replaceAll("\\", "/"), source, lines: source.split("\n") };
 });
 
 const sourceIndexes = new Map<string, SourceIndex>();

@@ -478,7 +478,8 @@ function scanCloneClasses(): Record<string, CloneMatch[]> {
   }
 
   for (const path of providerSourceFiles(providersDir)) {
-    const file = relative(repositoryRoot, path);
+    // The baseline keys are POSIX paths; `relative` returns backslashes on Windows.
+    const file = relative(repositoryRoot, path).replaceAll("\\", "/");
     const text = readFileSync(path, "utf8");
     for (const cloneClass of cloneClasses) {
       if (cloneClass.ownerFile === file) {
