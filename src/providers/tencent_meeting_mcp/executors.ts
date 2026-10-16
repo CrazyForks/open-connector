@@ -24,7 +24,8 @@ function connection(context: ApiKeyProviderContext) {
     headers: { "X-Tencent-Meeting-Token": requiredInputString(context.apiKey, "Token"), "X-Skill-Version": version },
     fetcher: context.fetcher,
     signal: context.signal,
-    redirect: "error" as const,
+    // Cloudflare Workers rejects `redirect: "error"`; a 3xx under "manual" still fails the MCP request.
+    redirect: "manual" as const,
     maxResponseBytes: 16 * 1024 * 1024,
     terminateSession: true,
   };
@@ -128,7 +129,7 @@ export const proxy: ProviderProxyExecutor = defineProviderProxy({
   auth: { type: "api_key_header", name: "X-Tencent-Meeting-Token" },
   sensitiveHeaders: ["X-Tencent-Meeting-Token"],
   skipDnsValidation: true,
-  redirect: "error",
+  redirect: "manual",
   customizeRequest({ url, headers }) {
     if (url.href !== endpoint)
       throw new ProviderRequestError(400, "Use the official Tencent Meeting MCP endpoint without a query string");

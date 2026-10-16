@@ -68,7 +68,7 @@ async function request({ route, method, data, apiKey, fetcher, parentSignal }: P
           `PortEden request failed: ${detail}`,
           undefined,
           body?.error === "API authentication failed"
-            ? "credential_expired"
+            ? "authorization_failed"
             : response.status === 429
               ? "rate_limited"
               : "provider_error",

@@ -37,7 +37,7 @@ for (const [service, proxy, endpoint] of [
       const fetcher = vi.fn(async () => Response.json({ ok: true }));
       vi.stubGlobal("fetch", fetcher);
       expect(await proxy({ endpoint, method: "POST", body: {} }, context)).toMatchObject({ ok: true });
-      expect(fetcher).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ redirect: "error" }));
+      expect(fetcher).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ redirect: "manual" }));
     });
   });
 }

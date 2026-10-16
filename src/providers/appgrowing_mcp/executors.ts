@@ -36,7 +36,8 @@ const handlers = mapProviderActionHandlers(
       headers: { ...defaultHeaders, authorization: `Bearer ${requiredInputString(context.apiKey, "API Key")}` },
       fetcher: context.fetcher,
       signal: context.signal,
-      redirect: "error" as const,
+      // Cloudflare Workers rejects `redirect: "error"`; a 3xx under "manual" still fails the MCP request.
+      redirect: "manual" as const,
       maxResponseBytes: 16 * 1024 * 1024,
       terminateSession: true,
     };
@@ -67,7 +68,7 @@ export const proxy: ProviderProxyExecutor = defineProviderProxy({
   baseUrl: origin,
   auth: { type: "api_key_authorization", prefix: "Bearer " },
   skipDnsValidation: true,
-  redirect: "error",
+  redirect: "manual",
   customizeRequest({ url, headers }) {
     if (url.href !== endpoint)
       throw new ProviderRequestError(
