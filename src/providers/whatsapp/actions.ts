@@ -19,6 +19,9 @@ const paging = s.looseObject("Pagination data returned by Meta.", {
   }),
   previous: s.string("URL for the previous page, when provided."),
   next: s.string("URL for the next page, when provided."),
+  hasMore: s.boolean(
+    "Whether another page exists. Meta returns `next` only when one does, so this is false on the final page even though `cursors.after` is still present.",
+  ),
 });
 const messageSendResponse = s.actionOutput({
   contacts: s.array(

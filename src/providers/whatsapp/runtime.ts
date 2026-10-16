@@ -944,10 +944,15 @@ function normalizePaging(value: unknown): Record<string, unknown> | undefined {
         after: readString(cursorsRecord.after),
       })
     : undefined;
+  const next = readString(record.next);
   return compactObject({
     cursors,
     previous: readString(record.previous),
-    next: readString(record.next),
+    next,
+    // Meta keeps `cursors.after` on the final page and signals the end by
+    // omitting `next`; a caller walking `after` alone cannot tell the last
+    // page from a middle one, so the end is spelled out as a boolean.
+    hasMore: next !== undefined,
   });
 }
 
