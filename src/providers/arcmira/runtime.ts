@@ -1,4 +1,4 @@
-import type { CredentialProfile } from "../../core/types.ts";
+import type { CredentialValidationResult } from "../../core/types.ts";
 import type { ApiKeyProviderContext, ProviderActionHandlers } from "../provider-runtime.ts";
 
 import { optionalRecord, optionalString, requiredString, requiredStringArray } from "../../core/cast.ts";
@@ -14,7 +14,6 @@ async function requestArcmira(
   context: ApiKeyProviderContext,
   path: string,
   input: Record<string, unknown> = {},
-  phase: "execute" | "validate" = "execute",
 ): Promise<unknown> {
   const url = new URL(`https://api.arcmira.com/v1/${path}`);
   for (const [key, value] of Object.entries(input)) {
@@ -33,12 +32,12 @@ async function requestArcmira(
     });
     if (!response.ok) {
       const error = optionalRecord(optionalRecord(payload)?.error);
-      const status = phase === "validate" && [401, 403].includes(response.status) ? 400 : response.status;
+      const status = response.status;
       throw new ProviderRequestError(
         status,
         optionalString(error?.message) ?? `Arcmira returned HTTP ${response.status}`,
         withRetryAfterSeconds(response, payload),
-        status === 402 ? "insufficient_credit" : undefined,
+        status === 402 ? "insufficient_credit" : status === 429 ? "rate_limited" : "provider_error",
       );
     }
     return payload;
@@ -55,13 +54,12 @@ export const arcmiraActionHandlers: ProviderActionHandlers<"arcmira", Handler> =
     requestArcmira(context, `transcripts/${encodeURIComponent(requiredString(video_id, "video_id"))}`, query),
 };
 
-export async function validateArcmiraCredential(context: ApiKeyProviderContext): Promise<CredentialProfile> {
-  const payload = optionalRecord(await requestArcmira(context, "me", {}, "validate"));
+export async function validateArcmiraCredential(context: ApiKeyProviderContext): Promise<CredentialValidationResult> {
+  const payload = optionalRecord(await requestArcmira(context, "me", {}));
   const account = optionalRecord(payload?.account);
   const accountId = requiredString(account?.id, "Arcmira account ID", providerResponseError);
   return {
-    accountId,
-    displayName: optionalString(account?.name) ?? accountId,
+    profile: { accountId, displayName: optionalString(account?.name) ?? accountId },
     grantedScopes: requiredStringArray(payload?.scopes, "Arcmira scopes", providerResponseError),
   };
 }

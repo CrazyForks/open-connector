@@ -452,7 +452,6 @@
       "src/providers/rawg/runtime.ts": 3,
       "src/providers/razorpay/runtime.ts": 2,
       "src/providers/readme/runtime.ts": 4,
-      "src/providers/redfox/executors.ts": 1,
       "src/providers/referralhero/runtime.ts": 2,
       "src/providers/render/executors.ts": 2,
       "src/providers/respond_io/executors.ts": 2,

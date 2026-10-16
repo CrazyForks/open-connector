@@ -112,3 +112,11 @@ it("returns declared output schemas only when requested", async () => {
   expect((await listMcpTools(options))[0]?.outputSchema).toBeUndefined();
   expect((await listMcpTools(options, { includeOutputSchema: true }))[0]?.outputSchema).toEqual(tool.outputSchema);
 });
+
+it("preserves tool metadata only when requested", async () => {
+  const tool = { name: "calendar", inputSchema: { type: "object" }, _meta: { visibility: "user" } };
+  client.request.mockResolvedValue({ tools: [tool] });
+  const options = { endpoint: "https://example.com/mcp", service: "Example" };
+  expect((await listMcpTools(options))[0]?.metadata).toBeUndefined();
+  expect((await listMcpTools(options, { includeMetadata: true }))[0]?.metadata).toEqual({ visibility: "user" });
+});

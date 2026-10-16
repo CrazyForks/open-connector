@@ -256,14 +256,14 @@ function createTwittrapiError(status: number, payload: unknown, phase: Twittrapi
 
   // An invalid, unknown, or deactivated key should surface as a field error on
   // the connect form rather than as a reconnect prompt.
-  if (phase === "validate" && (status === 401 || status === 403 || status === 404)) {
+  if (phase === "validate" && (status === 401 || status === 404)) {
     return new ProviderRequestError(400, message, payload);
   }
   if (status === 402) {
     return new ProviderRequestError(402, message, payload, "insufficient_credit");
   }
 
-  return new ProviderRequestError(status || 500, message, payload);
+  return new ProviderRequestError(status || 500, message, payload, status === 429 ? "rate_limited" : "provider_error");
 }
 
 function readData(payload: unknown): unknown {

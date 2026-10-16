@@ -179,7 +179,7 @@ export const twittrapiActions: readonly ProviderActionDefinition[] = [
     operationType: "read",
     description: "Get one X post by ID with its author, media, and engagement counts, without the reply thread.",
     requiredScopes: [],
-    inputSchema: s.object("The post to read.", { tweetId }),
+    inputSchema: s.requiredObject("The post to read.", { tweetId }),
     outputSchema: s.object("The requested post.", {
       tweet: s.describe(
         s.nullable(
@@ -261,7 +261,7 @@ export const twittrapiActions: readonly ProviderActionDefinition[] = [
     operationType: "read",
     description: "Get up to 500 X profiles in one call by numeric user ID.",
     requiredScopes: [],
-    inputSchema: s.object("The accounts to read.", {
+    inputSchema: s.requiredObject("The accounts to read.", {
       userIds: s.array("Numeric X user IDs.", userId, { minItems: 1, maxItems: 500 }),
     }),
     outputSchema: s.object("The profiles X returned. IDs that X does not return are left out.", {
