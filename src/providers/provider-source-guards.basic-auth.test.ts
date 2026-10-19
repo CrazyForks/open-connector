@@ -10,14 +10,16 @@ const guardFile = fileURLToPath(import.meta.url);
  * `btoa` is a browser-era Latin-1 encoder: it sends the wrong bytes for an
  * accented credential and throws on anything outside Latin-1. Provider code
  * must build Basic credentials with `basicAuthorizationHeader` instead. These
- * two files base64 a binary string assembled byte by byte, which is Latin-1 by
+ * files base64 a binary string assembled byte by byte, which is Latin-1 by
  * construction and has nothing to do with credentials, so the one call each of
  * them makes is exempt. The exemption is the exact call text rather than the
- * file, so a credential-bearing `btoa` added elsewhere in either file is still
+ * file, so a credential-bearing `btoa` added elsewhere in any of them is still
  * reported.
  */
 const binaryStringAllowlist = new Map<string, string>([
   ["gitea/runtime.ts", "return btoa(binary);"],
+  // DER bytes of a re-wrapped private key, encoded for a PEM body when `Buffer` is absent.
+  ["github/app-installation.ts", "return btoa(binary);"],
   ["pi_hole/runtime.ts", "return btoa(binary);"],
 ]);
 

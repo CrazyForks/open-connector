@@ -184,6 +184,18 @@ curl -s -X POST http://localhost:3000/v1/actions/github.get_current_user \
   -d '{"input":{}}'
 ```
 
+A GitHub App installation works the same way with no token to paste: store the App ID, the
+installation id and the App's private key, and the runtime mints one-hour installation tokens on
+demand. The connection profile identifies the installation's account; `get_current_user` requires
+a personal access token or OAuth user credential. Installation repository listing supports
+pagination only; omit `visibility`, `sort` and `direction`.
+
+```bash
+curl -s -X PUT http://localhost:3000/api/connections/github \
+  -H 'content-type: application/json' \
+  -d "{\"authType\":\"custom_credential\",\"values\":{\"appId\":\"1234567\",\"installationId\":\"87654321\",\"privateKey\":\"$(awk 'BEGIN{ORS="\\n"}1' app.private-key.pem)\"}}"
+```
+
 For OAuth2 apps, named connections, credential encryption, token refresh, and action policies, see
 [docs/credentials.md](docs/credentials.md) and [docs/configuration.md](docs/configuration.md).
 

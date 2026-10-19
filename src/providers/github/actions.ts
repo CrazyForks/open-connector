@@ -614,7 +614,8 @@ export const githubActions: ActionDefinition[] = [
   action({
     name: "get_current_user",
     operationType: "read",
-    description: "Get the current authenticated GitHub user profile.",
+    description:
+      "Get the current authenticated GitHub user profile using a personal access token or OAuth user credential. GitHub App installation credentials are not supported.",
     requiredScopes: githubUserReadScopes,
     inputSchema: s.object({}),
     outputSchema: githubCurrentUserSchema,
@@ -622,7 +623,8 @@ export const githubActions: ActionDefinition[] = [
   action({
     name: "list_my_repositories",
     operationType: "read",
-    description: "List repositories visible to the authenticated GitHub user.",
+    description:
+      "List repositories visible to the authenticated GitHub user, or accessible to the GitHub App installation. Installation credentials support pagination only; omit visibility, sort and direction.",
     requiredScopes: githubRepoScopes,
     inputSchema: s.object({
       visibility: s.stringEnum(["all", "public", "private"]),

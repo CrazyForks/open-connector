@@ -18,14 +18,16 @@ const service = "github";
 /**
  * GitHub provider backed by the GitHub REST API.
  *
- * Open-source users can either configure a personal access token or bring
- * their own GitHub OAuth app with localhost callback support.
+ * Open-source users can either configure a personal access token, bring
+ * their own GitHub OAuth app with localhost callback support, or connect a
+ * GitHub App installation whose tokens the runtime mints from the App's
+ * private key.
  */
 export const provider: ProviderDefinition = {
   service,
   displayName: "GitHub",
   categories: ["Developer Tools"],
-  authTypes: ["oauth2", "api_key"],
+  authTypes: ["oauth2", "api_key", "custom_credential"],
   auth: [
     {
       type: "oauth2",
@@ -83,6 +85,43 @@ export const provider: ProviderDefinition = {
       placeholder: "github_pat_...",
       description:
         "GitHub personal access token used with the Authorization Bearer header. Fine-grained tokens are recommended.",
+    },
+    {
+      type: "custom_credential",
+      label: "GitHub App installation",
+      description:
+        "Authenticate as a GitHub App installed on an account. The runtime signs a JWT with the App's private key and mints one-hour installation access tokens on demand, so no token is pasted or stored. The token can read the repositories the installation selected plus the content of any public repository; user-only actions such as get_current_user are not supported.",
+      fields: [
+        {
+          key: "appId",
+          label: "App ID",
+          inputType: "text",
+          required: true,
+          secret: false,
+          placeholder: "1234567",
+          description: "The numeric App ID shown on the GitHub App's settings page under About.",
+        },
+        {
+          key: "installationId",
+          label: "Installation ID",
+          inputType: "text",
+          required: true,
+          secret: false,
+          placeholder: "87654321",
+          description:
+            "The numeric id of the installation to act as, from the installation's settings URL (…/settings/installations/<id>) or the installation_id query parameter of the post-install redirect.",
+        },
+        {
+          key: "privateKey",
+          label: "Private key (.pem)",
+          inputType: "textarea",
+          required: true,
+          secret: true,
+          placeholder: "-----BEGIN RSA PRIVATE KEY-----",
+          description:
+            "The full contents of the private key file generated on the GitHub App's settings page, an RSA key in PEM format. Escaped \\n line breaks are accepted.",
+        },
+      ],
     },
   ],
   homepageUrl: "https://github.com",

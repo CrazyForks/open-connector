@@ -15,11 +15,13 @@ export type GitHubActionContext = {
   fetcher: typeof fetch;
   transitFiles?: TransitFileWriter;
   signal?: AbortSignal;
+  installation?: boolean;
 };
 
 export type GitHubActionHandler = (input: Record<string, unknown>, context: GitHubActionContext) => Promise<unknown>;
 
 interface GitHubJsonRequest {
+  signal?: AbortSignal;
   method?: string;
   path: string;
   query?: Record<string, string | number | boolean | undefined>;
@@ -55,6 +57,7 @@ export async function githubRequestJson<T>(input: GitHubJsonRequest): Promise<T>
   const url = buildGitHubUrl(input.path, input.query);
   const response = await input.fetcher(url, {
     method: input.method ?? "GET",
+    signal: input.signal,
     headers: githubHeaders(input.accessToken, input.body !== undefined),
     body: input.body === undefined ? undefined : JSON.stringify(input.body),
   });

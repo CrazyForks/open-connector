@@ -25,7 +25,10 @@ export const repositoryActionHandlers: ProviderActionHandlerSubset<"github", Git
     });
   },
 
-  list_my_repositories(input, { accessToken, fetcher }) {
+  list_my_repositories(input, { accessToken, fetcher, installation }) {
+    if (installation) {
+      return listInstallationRepositories(input, accessToken, fetcher);
+    }
     return listMyRepositories(input, accessToken, fetcher);
   },
 
@@ -350,6 +353,32 @@ async function listMyRepositories(input: Record<string, unknown>, accessToken: s
   });
 
   return { repositories };
+}
+
+async function listInstallationRepositories(
+  input: Record<string, unknown>,
+  accessToken: string,
+  fetcher: typeof fetch,
+) {
+  for (const field of ["visibility", "sort", "direction"]) {
+    if (input[field] !== undefined) {
+      throw new ProviderRequestError(
+        400,
+        `${field} is not supported with a GitHub App installation credential. Omit it to list the installation's repositories.`,
+      );
+    }
+  }
+  const page = await githubRequestJson<{ repositories?: Record<string, unknown>[] }>({
+    path: "/installation/repositories",
+    query: compactObject({
+      per_page: optionalInteger(input.perPage),
+      page: optionalInteger(input.page),
+    }),
+    accessToken,
+    fetcher,
+  });
+
+  return { repositories: page.repositories ?? [] };
 }
 
 async function deleteRepository(input: Record<string, unknown>, accessToken: string, fetcher: typeof fetch) {
