@@ -380,7 +380,7 @@ describe("notion_mcp executors", () => {
     }
     const deferred = createSyntheticHost(allTools, undefined, {
       ...recordedAnswers,
-      "notion-create-pages": JSON.stringify({ async_task: { id: "task-1", status: "queued" } }),
+      "notion-create-pages": JSON.stringify({ object: "async_task", id: "task-1", status: "queued" }),
     });
     try {
       expect(await executors["notion_mcp.create_pages"]!({ pages: [{ content: "x" }] }, executionContext())).toEqual({
@@ -388,11 +388,27 @@ describe("notion_mcp executors", () => {
         output: {
           pages: [],
           async_task_id: "task-1",
-          raw: JSON.stringify({ async_task: { id: "task-1", status: "queued" } }),
+          raw: JSON.stringify({ object: "async_task", id: "task-1", status: "queued" }),
         },
       });
     } finally {
       await deferred.close();
+    }
+  });
+
+  it("update_page preserves async task IDs, warning objects and raw MCP responses", async () => {
+    const warnings = [{ code: "no_match", message: "No matching text", details: { index: 1 } }];
+    const raw = JSON.stringify({ object: "async_task", id: "task-2", status: "queued", warnings });
+    const host = createSyntheticHost(allTools, undefined, { ...recordedAnswers, "notion-update-page": raw });
+    try {
+      expect(
+        await executors["notion_mcp.update_page"]!({ page_id: "p-1", command: "update_content" }, executionContext()),
+      ).toEqual({
+        ok: true,
+        output: { page_id: "p-1", async_task_id: "task-2", warnings, raw },
+      });
+    } finally {
+      await host.close();
     }
   });
 
@@ -527,8 +543,8 @@ describe("notion_mcp executors", () => {
   });
 
   it.each([
-    [401, "authorization_failed"],
-    [403, "authorization_failed"],
+    [401, "provider_error"],
+    [403, "provider_error"],
     [429, "rate_limited"],
   ])("maps a synthetic HTTP %i and never returns the token in the error", async (status, code) => {
     const host = createSyntheticHost([], async (request) =>
@@ -606,14 +622,15 @@ describe("notion_mcp credential validator", () => {
     }
   });
 
-  it("reports a rejected token as invalid credentials at sign-in", async () => {
+  it("preserves an ambiguous authorization failure at sign-in", async () => {
     const host = createSyntheticHost([], async (request) =>
       request.method === "POST" ? new Response("nope", { status: 401 }) : undefined,
     );
     try {
       await expect(credentialValidators.oauth2!(oauthCredential(), { fetcher: host.fetcher })).rejects.toMatchObject({
-        status: 400,
-        message: "Notion MCP credential is invalid or expired.",
+        status: 401,
+        code: "provider_error",
+        message: expect.stringMatching(/Notion MCP (authorization request failed|request failed with HTTP 401)/),
       });
     } finally {
       await host.close();
