@@ -2914,6 +2914,22 @@ describe("ConnectServer", () => {
     });
   });
 
+  it.each(["/api", "/v1"])("enforces search limit boundaries on %s", async (prefix) => {
+    const app = createTestServer([{ ...apiKeyProvider, actions: [echoAction] }]).createApp();
+
+    const accepted = await app.request(`${prefix}/actions/search?q=echo&limit=50`);
+    expect(accepted.status).toBe(200);
+
+    const rejected = await app.request(`${prefix}/actions/search?q=echo&limit=51`);
+    expect(rejected.status).toBe(400);
+    const message = "limit must be an integer between 1 and 50.";
+    await expect(rejected.json()).resolves.toMatchObject(
+      prefix === "/api"
+        ? { error: { code: "invalid_input", message } }
+        : { success: false, errorCode: "invalid_input", message },
+    );
+  });
+
   it("drops stale action search index hits that are missing from the catalog", async () => {
     const staleAction: ActionDefinition = {
       ...echoAction,
