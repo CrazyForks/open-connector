@@ -12,6 +12,7 @@ import type { IOAuthClientConfigStore, OAuthClientConfig } from "./oauth-client-
 import type { IOAuthStateStore, OAuthAuthorizationState } from "./oauth-flow-service.ts";
 import type { ProviderOAuthRuntime } from "./oauth-token.ts";
 
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCatalogStore } from "../catalog-store.ts";
 import { ConnectionService } from "../connection-service.ts";
@@ -1175,6 +1176,25 @@ describe("OAuthFlowService", () => {
 
     await services.flow.completeAuthorization({ state: started.state, code: "code" });
     expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("https://tenant.example.com/oauth/tenant%2Fa/token");
+  });
+
+  it("passes the matching PKCE verifier to a custom token exchange", async () => {
+    let verifier: string | undefined;
+    const services = createServices([pkceOAuthProvider], {
+      oauthRuntime: {
+        async exchangeCode(input) {
+          verifier = input.codeVerifier;
+          return { accessToken: "custom-token", tokenType: "Bearer", metadata: {} };
+        },
+      },
+    });
+    await services.clientConfigs.upsertConfig({ service: "pkce", clientId: "client-id", clientSecret: "secret" });
+    const started = await services.flow.startAuthorization({ service: "pkce" });
+    await services.flow.completeAuthorization({ state: started.state, code: "authorization-code" });
+    expect(verifier).toBeDefined();
+    expect(createHash("sha256").update(verifier!).digest("base64url")).toBe(
+      new URL(started.authorizationUrl).searchParams.get("code_challenge"),
+    );
   });
 
   it("stores the token returned by a provider OAuth runtime", async () => {

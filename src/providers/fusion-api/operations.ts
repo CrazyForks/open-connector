@@ -30,6 +30,44 @@ export interface FusionApiOperation {
 
 export const fusionApiOperations: FusionApiOperation[] = [
   {
+    actionName: "oomol_ocr_submit",
+    operationType: "write",
+    method: "POST",
+    path: "/v1/oomol-ocr/submit",
+    tag: "oomol-ocr",
+    description: "Recognize image text and suggest corrections for Chinese typos",
+    successStatuses: [200],
+    pathParams: [],
+    inputFields: [
+      {
+        name: "imageURL",
+        kind: "string",
+        required: true,
+        description: "Publicly accessible image URL.",
+        format: "uri",
+      },
+      {
+        name: "correct",
+        kind: "boolean",
+        required: false,
+        description: "Generate Chinese typo correction suggestions after text recognition.",
+        defaultValue: true,
+      },
+    ],
+  },
+  {
+    actionName: "oomol_ocr_result",
+    operationType: "read",
+    method: "GET",
+    path: "/v1/oomol-ocr/result/{sessionID}",
+    tag: "oomol-ocr",
+    description: "Get image text recognition and Chinese typo correction results",
+    successStatuses: [200, 202, 404],
+    pathParams: ["sessionID"],
+    inputFields: [{ name: "sessionID", kind: "string", required: true, description: "Session ID" }],
+  },
+
+  {
     actionName: "cphone_nano_banana_result",
     operationType: "read",
     method: "GET",

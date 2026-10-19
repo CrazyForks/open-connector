@@ -134,6 +134,8 @@ export async function readBoundedResponseBytes(
 }
 
 export interface TransitResponseOptions {
+  /** Optional provider limit, further bounded by the storage limit. */
+  maxBytes?: number;
   /** Name the stored transit file carries. */
   name: string;
   mimeType: string;
@@ -158,7 +160,7 @@ export async function storeResponseInTransit(
   options: TransitResponseOptions,
 ): Promise<TransitFileUpload> {
   const limits: BoundedResponseBytesOptions = {
-    maxBytes: transitFiles.maxBytes,
+    maxBytes: Math.min(transitFiles.maxBytes, options.maxBytes ?? transitFiles.maxBytes),
     fieldName: options.fieldName,
     createError: options.createError,
     signal: options.signal,
@@ -177,9 +179,21 @@ export async function storeResponseInTransit(
     void response.body.cancel().catch(() => undefined);
     assertMaxBytes(contentLength, limits);
   }
+  let size = 0;
+  const body = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        options.signal?.throwIfAborted();
+        size += chunk.byteLength;
+        assertMaxBytes(size, limits);
+        controller.enqueue(chunk);
+      },
+    }),
+    { signal: options.signal },
+  );
   try {
     return await transitFiles.createFromStream({
-      body: response.body,
+      body,
       name: options.name.toWellFormed(),
       mimeType,
       signal: options.signal,

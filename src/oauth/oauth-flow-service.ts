@@ -309,6 +309,7 @@ export class OAuthFlowService {
           if (providerOAuth?.exchangeCode) {
             return providerOAuth.exchangeCode({
               code: input.code,
+              codeVerifier: pending.pkceCodeVerifier,
               state: pending.state,
               callbackQuery: input.callbackQuery,
               callbackParameters: input.callbackParameters,

@@ -406,6 +406,17 @@ describe("storeResponseInTransit", () => {
     createError: (message: string) => Object.assign(new Error(message), { status: 413 }),
   };
 
+  it.each([true, false])(
+    "enforces the smaller provider limit without Content-Length (streaming=%s)",
+    async (streaming) => {
+      const { stored, writer } = store({ maxBytes: 1024, streaming });
+      await expect(
+        storeResponseInTransit(new Response("12345"), writer, { ...options, maxBytes: 4 }),
+      ).rejects.toMatchObject({ status: 413, message: "Test download exceeds 4 bytes" });
+      expect(stored).toEqual([]);
+    },
+  );
+
   it("pipes the body to a streaming backend instead of buffering it", async () => {
     const { stored, writer } = store({ maxBytes: 1024, streaming: true });
     const upload = await storeResponseInTransit(new Response(new Uint8Array([1, 2, 3])), writer, options);

@@ -36,6 +36,8 @@ export interface OAuthTokenResult {
 
 export interface OAuthCodeExchangeInput {
   code: string;
+  /** Verifier belonging to the claimed authorization state. */
+  codeVerifier?: string;
   /** State already claimed by the shared OAuth lifecycle. */
   state?: string;
   /** Original query string, preserving duplicate parameters for signature verification. */
