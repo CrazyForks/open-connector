@@ -127,7 +127,7 @@ export async function callMcpTool(input: CallMcpToolOptions): Promise<unknown> {
           name: input.toolName,
           arguments: input.arguments,
         },
-        { signal: requestTimeout.signal },
+        { signal: requestTimeout.signal, timeout: input.requestTimeoutMs },
       );
     } finally {
       requestTimeout.cleanup();
