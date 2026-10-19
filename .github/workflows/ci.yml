@@ -1,7 +1,7 @@
 name: CI
 
 # PR quality gates for OOMOL Connect, run serially in a single job:
-#   1) Lint (oxlint + oxfmt)  ->  2) Typecheck (build)  ->  3) Unit tests (vitest)
+#   1) Lint (oxlint + oxfmt)  ->  2) Typecheck (build)  ->  3) Action examples  ->  4) Unit tests (vitest)
 # Serial keeps it simple and fail-fast: dependencies install once and a failing
 # earlier step short-circuits the rest. Also runs on pushes to main so the default
 # branch stays green and the npm cache stays warm for PR runs.
@@ -75,6 +75,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # 3) Unit tests (vitest): covers src and the web workspace.
+      # 3) Action examples: generate the catalog as the docs build does, then validate every
+      # schema-derived example against its action's input schema, as AGENTS.md requires.
+      - name: Validate action examples
+        run: npm run generate:catalog && node scripts/check-action-examples.ts
+
+      # 4) Unit tests (vitest): covers src and the web workspace.
       - name: Run tests (vitest)
         run: npm test
