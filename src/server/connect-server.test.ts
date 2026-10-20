@@ -1475,6 +1475,39 @@ describe("ConnectServer", () => {
     });
   });
 
+  it("documents every /v1 route the app serves", async () => {
+    const app = createTestServer([apiKeyProvider, oauthProvider]).createApp();
+    const document = (await (await app.request("/openapi.json")).json()) as {
+      paths: Record<string, Record<string, unknown>>;
+    };
+
+    // The served document is the SDK/CLI contract for these routes: a route
+    // added without a path entry, or a documented path that no longer exists,
+    // is invisible to every client that reads the document. Operations are read
+    // from the path item itself (excluding its non-operation fields) so the
+    // comparison covers every HTTP method without a method list to maintain.
+    const pathItemFields = new Set(["$ref", "summary", "description", "servers", "parameters"]);
+    const documented = new Set<string>();
+    for (const [path, operations] of Object.entries(document.paths)) {
+      if (!path.startsWith("/v1")) continue;
+      for (const method of Object.keys(operations)) {
+        if (pathItemFields.has(method) || method.startsWith("x-")) continue;
+        documented.add(`${method.toUpperCase()} ${path}`);
+      }
+    }
+
+    const registered = new Set(
+      app.routes
+        .filter((route) => route.method !== "ALL" && route.path.startsWith("/v1"))
+        .map((route) => `${route.method} ${route.path.replaceAll(/:([A-Za-z0-9_]+)/gu, "{$1}")}`),
+    );
+
+    expect(registered.size).toBeGreaterThanOrEqual(20);
+    expect(documented.size).toBeGreaterThanOrEqual(20);
+    expect([...registered].filter((route) => !documented.has(route))).toEqual([]);
+    expect([...documented].filter((route) => !registered.has(route))).toEqual([]);
+  });
+
   it("rejects non-POST MCP requests", async () => {
     const app = createTestServer([apiKeyProvider]).createApp();
 
