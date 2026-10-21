@@ -19,6 +19,7 @@ import {
   readProviderErrorTextBody,
   readProviderJson,
   readProviderProxyErrorMessage,
+  readProviderProxyResponse,
   requiredInputString,
   requiredResponseRecord,
   runProviderRequest,
@@ -92,6 +93,39 @@ describe("readProviderJson", () => {
     ).rejects.toMatchObject({
       status: 500,
       message: "provider request failed",
+    });
+  });
+});
+
+describe("readProviderProxyResponse", () => {
+  it.each([
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "Application/Vnd.Openxmlformats-Officedocument.Wordprocessingml.Document ; charset=binary",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ])("preserves binary OpenXML bytes for %s", async (contentType) => {
+    // Synthetic ZIP-like bytes with invalid UTF-8, not a real Office document.
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0xff, 0x80, 0xc3, 0x28]);
+    const headers = { "content-type": contentType, "x-request-id": "synthetic-download" };
+
+    const result = await readProviderProxyResponse(new Response(bytes, { status: 206, headers }));
+
+    expect(result).toEqual({ status: 206, headers, bodyEncoding: "base64", data: expect.any(String) });
+    expect(Buffer.from(result.data as string, "base64")).toEqual(Buffer.from(bytes));
+  });
+
+  it.each([
+    "Application/XML ; charset=UTF-8",
+    "application/xml-external-parsed-entity; charset=UTF-8",
+    "Application/XML-DTD ; charset=UTF-8",
+    "Image/SVG+XML ; charset=UTF-8",
+  ])("keeps XML responses as text for %s", async (contentType) => {
+    const data = "<root>café</root>";
+    const headers = { "content-type": contentType };
+
+    await expect(readProviderProxyResponse(new Response(data, { headers }))).resolves.toEqual({
+      status: 200,
+      headers,
+      data,
     });
   });
 });

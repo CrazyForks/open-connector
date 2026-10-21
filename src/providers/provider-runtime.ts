@@ -627,10 +627,13 @@ export async function readProviderProxyErrorMessage(response: Response, fallback
 }
 
 function isTextProxyContentType(contentType: string): boolean {
-  const normalized = contentType.toLowerCase();
+  const normalized = contentType.split(";", 1)[0]!.trim().toLowerCase();
   return (
     normalized.startsWith("text/") ||
-    normalized.includes("xml") ||
+    normalized === "application/xml" ||
+    normalized === "application/xml-external-parsed-entity" ||
+    normalized === "application/xml-dtd" ||
+    normalized.endsWith("+xml") ||
     normalized.includes("javascript") ||
     normalized.includes("x-www-form-urlencoded")
   );
