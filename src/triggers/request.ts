@@ -1,12 +1,15 @@
 import type { JsonValue } from "./common/types.ts";
+import type { SourceOperation } from "./sources/operation.ts";
 
 import { z } from "zod";
 import { HttpRequestError } from "../server/api/http-utils.ts";
+import { sourceOperationSchema } from "./sources/operation.ts";
 
 const config = z.record(z.string(), z.json());
 const subscriptionId = z.string().min(1).max(128);
 const requestKey = z.string().min(1).max(512);
 const requestSchema = z.discriminatedUnion("operation", [
+  z.strictObject({ operation: z.literal("source"), request: sourceOperationSchema }),
   z.strictObject({ operation: z.literal("options"), config, field: z.string().min(1).max(128) }),
   z.strictObject({ operation: z.literal("read"), config, checkpoint: z.json() }),
   z.strictObject({
@@ -36,6 +39,7 @@ interface ConfigRequest {
   config: Readonly<Record<string, JsonValue>>;
 }
 export type TriggerRequest =
+  | { operation: "source"; request: SourceOperation }
   | (ConfigRequest & { operation: "options"; field: string })
   | (ConfigRequest & { operation: "read"; checkpoint: JsonValue })
   | (ConfigRequest & {

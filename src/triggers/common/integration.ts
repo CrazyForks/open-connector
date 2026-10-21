@@ -1,3 +1,5 @@
+import type { CreateEventSource, UpdateEventSource, EventSource } from "../sources/configuration.ts";
+import type { EventSourceDefinition } from "../sources/definition.ts";
 import type { TriggerConfigOption, TriggerConfigOptionsContext } from "./configOptions.ts";
 import type { ConnectorProxyRequest, ConnectorProxyResult, ConnectorProxy } from "./proxy.ts";
 import type { IntegrationEndpointMethod, JsonValue, TriggerKeySnapshot } from "./types.ts";
@@ -123,14 +125,26 @@ export interface ResourceSubscription {
   readonly unsubscribe: ConnectorProxyRequest;
   readonly inspect?: ConnectorProxyRequest;
 }
-export interface ResourceDefinition {
-  readonly subscriptions: (config: Readonly<Record<string, JsonValue>>) => readonly ResourceSubscription[];
-  readonly response: (result: ConnectorProxyResult) => Readonly<Record<string, JsonValue>>;
-}
+export type ResourceDefinition =
+  | {
+      readonly subscriptions: (config: Readonly<Record<string, JsonValue>>) => readonly ResourceSubscription[];
+      readonly response: (result: ConnectorProxyResult) => Readonly<Record<string, JsonValue>>;
+    }
+  | { readonly reconcile: (context: IntegrationReconcileContext) => Promise<IntegrationReconcileResult> };
 
 export interface IntegrationDefinition {
+  readonly source?: EventSourceDefinition<CreateEventSource, UpdateEventSource, Partial<EventSource>>;
+  readonly sourceReceive?: (
+    context: Omit<ListenerReadContext, "checkpoint"> & {
+      readonly headers: Readonly<Record<string, string>>;
+      readonly rawBody: string;
+    },
+  ) => Promise<Readonly<Record<string, JsonValue>>>;
+  readonly sourceIdentity?: (
+    context: Omit<ListenerReadContext, "checkpoint">,
+  ) => Promise<Readonly<Record<string, JsonValue>>>;
   readonly resources?: ResourceDefinition;
-  readonly eventSource?: "feishu";
+  readonly eventSource?: "feishu" | "slack" | "intercom" | "sentry" | "zoom" | "fireflies" | "jira";
   readonly configOptions?: (context: TriggerConfigOptionsContext) => Promise<readonly TriggerConfigOption[]>;
   readonly listener?: ListenerSource;
   readonly initialState?: {
@@ -150,6 +164,11 @@ export class IntegrationConnectionError extends Error {
 
 export class PermanentIntegrationError extends Error {
   override readonly name = "PermanentIntegrationError";
+  readonly reason: "trigger_quota_exceeded" | "trigger_subscription_uncertain" | undefined;
+  constructor(message: string, reason?: "trigger_quota_exceeded" | "trigger_subscription_uncertain") {
+    super(message);
+    this.reason = reason;
+  }
 }
 
 export class TransientIntegrationError extends Error {

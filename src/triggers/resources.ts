@@ -1,5 +1,6 @@
 import type { IntegrationReconcileResult, ResourceDefinition } from "./common/integration.ts";
 import type { ConnectorProxy } from "./common/proxy.ts";
+import type { JsonValue } from "./common/types.ts";
 import type { TriggerRequest } from "./request.ts";
 import type { TriggerSubscription, TriggerStore } from "./store.ts";
 import type { SubscriptionOwner } from "./subscriptions.ts";
@@ -8,6 +9,11 @@ import { isDeepStrictEqual } from "node:util";
 import { HttpRequestError } from "../server/api/http-utils.ts";
 import { canonicalJsonBytes, digestBytes } from "./common/encoding.ts";
 import { subscriptionId, withSubscription } from "./subscriptions.ts";
+
+interface ResourceSubscriptionResult extends IntegrationReconcileResult {
+  readonly subscription?: Readonly<Record<string, JsonValue>>;
+  readonly reconcileAt?: number;
+}
 
 async function resourceSubscriptionId(owner: SubscriptionOwner, key: string): Promise<string> {
   return digestBytes(canonicalJsonBytes(["resource-set", owner.service, owner.providerAccountId, key]));
@@ -20,7 +26,7 @@ export async function executeResourceSubscription(
   input: Extract<TriggerRequest, { operation: "resource" }>,
   proxy: ConnectorProxy,
   signal: AbortSignal,
-): Promise<IntegrationReconcileResult> {
+): Promise<ResourceSubscriptionResult> {
   const member = await subscriptionId(owner, input.requestKey);
   await store.insertFlowTrigger({
     mode: "resource",
@@ -36,7 +42,7 @@ export async function executeResourceSubscription(
     reconcileAt: 0,
     status: "active",
   });
-  return withSubscription<IntegrationReconcileResult>(store, member, signal, async (consumer, saveConsumer) => {
+  return withSubscription<ResourceSubscriptionResult>(store, member, signal, async (consumer, saveConsumer) => {
     consumer.connectionRevision = owner.connectionRevision;
     return executeResourceSubscriptionOperation(store, definition, consumer, saveConsumer, input, proxy, signal);
   });
@@ -51,7 +57,7 @@ export async function executeResourceSubscriptionOperation(
   input: Extract<TriggerRequest, { operation: "resource" }>,
   proxy: ConnectorProxy,
   signal: AbortSignal,
-): Promise<IntegrationReconcileResult> {
+): Promise<ResourceSubscriptionResult> {
   const member = consumer.id;
   const owner = {
     tokenId: consumer.tokenId,
@@ -74,6 +80,34 @@ export async function executeResourceSubscriptionOperation(
   if (!input.active) {
     consumer.status = "deleting";
     await saveConsumer();
+  }
+  if ("reconcile" in definition) {
+    const result = await definition.reconcile({
+      active: input.active,
+      config: input.config,
+      connector: proxy,
+      signal,
+      now: new Date(),
+      endpointUrl: typeof input.config.endpointUrl === "string" ? input.config.endpointUrl : "",
+      callbackSecret: "",
+      idempotencyKey: member,
+      state: {
+        checkpoint: consumer.checkpoint,
+        subscription: consumer.subscription,
+        saveCheckpoint: async (checkpoint) => {
+          consumer.checkpoint = checkpoint;
+          await saveConsumer();
+        },
+        saveSubscription: async (subscription, reconcileAt) => {
+          consumer.subscription = subscription;
+          consumer.reconcileAt = reconcileAt.getTime();
+          await saveConsumer();
+        },
+      },
+    });
+    if (!input.active && result.outcome === "ready") consumer.status = "deleted";
+    await saveConsumer();
+    return { ...result, subscription: consumer.subscription, reconcileAt: consumer.reconcileAt };
   }
   for (const resource of definition.subscriptions(input.config)) {
     const shared = { ...owner, tokenId: "shared-resource" };
@@ -132,6 +166,7 @@ export async function abandonResourceSubscription(
   consumer: TriggerSubscription,
   signal: AbortSignal,
 ): Promise<void> {
+  if ("reconcile" in definition) return;
   for (const resource of definition.subscriptions(consumer.config)) {
     const id = await resourceSubscriptionId(consumer, resource.key);
     if (!(await store.getFlowTrigger(id))) continue;

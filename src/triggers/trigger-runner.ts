@@ -2,6 +2,7 @@ import type { CatalogStore } from "../catalog-store.ts";
 import type { ConnectionService } from "../connection-service.ts";
 import type { ActionPolicySnapshot } from "../core/action-policy.ts";
 import type { ProviderHttpDispatchOptions } from "../core/provider-http-dispatch.ts";
+import type { OAuthClientConfigService } from "../oauth/oauth-client-config-service.ts";
 import type { IProviderLoader } from "../providers/provider-loader.ts";
 import type { RuntimeGrant } from "../server/storage/runtime-token-service.ts";
 import type { IntegrationDefinition } from "./common/integration.ts";
@@ -13,10 +14,12 @@ import type { TriggerSubscription, TriggerStore } from "./store.ts";
 import { ConnectionError } from "../connection-service.ts";
 import { optionalInteger, optionalRecord } from "../core/cast.ts";
 import { withProviderHttpDispatch } from "../core/provider-http-dispatch.ts";
+import { readOAuthClientConfigMetadata } from "../oauth/oauth-client-config-service.ts";
 import { withProviderHttpDispatchResult } from "../providers/provider-runtime.ts";
 import { HttpRequestError } from "../server/api/http-utils.ts";
 import { mapConnectionErrorStatus } from "../server/api/runtime-api.ts";
 import { resolveTriggerConfig } from "./common/config.ts";
+import { PermanentIntegrationError } from "./common/integration.ts";
 import { validateListenerPage } from "./common/integration.ts";
 import {
   executeResourceSubscription,
@@ -26,6 +29,7 @@ import {
 import { executeSubscription, executeSubscriptionOperation } from "./subscriptions.ts";
 
 interface TriggerRunnerOptions {
+  oauthClientConfigs?: Pick<OAuthClientConfigService, "getConfig">;
   providerHttpDispatch?: ProviderHttpDispatchOptions;
   catalog: CatalogStore;
   providerLoader: IProviderLoader;
@@ -61,8 +65,11 @@ export class TriggerRunner {
   private async runTrigger(input: RunTriggerInput): Promise<unknown> {
     const decision = input.policy.evaluateTrigger(input.triggerId);
     if (!decision.allowed) throw new HttpRequestError(decision.code, decision.message, 403);
-    const stateful = input.request.operation !== "read" && input.request.operation !== "options";
-    if (stateful && !input.grant)
+    const stateful = !["read", "options", "source"].includes(input.request.operation);
+    if (
+      (stateful || (input.request.operation === "source" && input.request.request.action === "receive")) &&
+      !input.grant
+    )
       throw new HttpRequestError(
         "trigger_owner_required",
         "Stateful Trigger operations require a persistent runtime token.",
@@ -76,16 +83,51 @@ export class TriggerRunner {
       input.signal,
       input.policy,
     );
+    const permission = this.options.catalog.providers
+      .find((provider) => provider.service === input.service)
+      ?.triggerPermissions?.find((permission) => permission.id === input.triggerId);
+    const alternatives = permission?.providerScopeAlternatives;
+    const cleanup =
+      (input.request.operation === "reconcile" || input.request.operation === "resource") && !input.request.active;
+    if (!cleanup && alternatives && !alternatives.some((scope) => target.scopes.includes(scope)))
+      throw new HttpRequestError("scope_missing", "The Trigger requires additional provider permissions.", 403);
     const request = input.request;
+    if (request.operation === "source") {
+      const { executeSourceOperation } = await import("./sources/operation.ts");
+      if (!("source" in definition) || !definition.source)
+        throw new HttpRequestError("invalid_input", "This Trigger has no shared source protocol.");
+      return this.providerOperation(input.service, () =>
+        executeSourceOperation(definition, request.request, target.proxy, input.signal),
+      );
+    }
     if (request.operation === "receive") {
-      if (definition.snapshot.type !== "integration" || ("eventSource" in definition && definition.eventSource))
+      if (!("receive" in definition) || definition.eventSource)
         throw new HttpRequestError("invalid_input", "This Trigger has no remote webhook.");
       return this.providerOperation(input.service, () =>
         executeSubscription(
           this.options.store,
-          definition as IntegrationDefinition,
+          definition,
           { ...target.owner, tokenId: input.grant!.tokenId, triggerId: input.triggerId },
           request,
+          target.proxy,
+          input.signal,
+        ),
+      );
+    }
+    if (request.operation === "resource") {
+      if (!("resources" in definition) || !definition.resources)
+        throw new HttpRequestError("invalid_input", "This Trigger has no shared resource.");
+      const resources = definition.resources;
+      const config =
+        "reconcile" in resources
+          ? request.config
+          : resolveTriggerConfig(definition.snapshot.configInputs, request.config);
+      return this.providerOperation(input.service, () =>
+        executeResourceSubscription(
+          this.options.store,
+          resources,
+          { ...target.owner, tokenId: input.grant!.tokenId, triggerId: input.triggerId },
+          { ...request, config },
           target.proxy,
           input.signal,
         ),
@@ -108,31 +150,19 @@ export class TriggerRunner {
           return definition.configOptions({ ...context, field: request.field });
         }
         case "read": {
-          if (definition.snapshot.type === "poll")
-            return (definition as PollDefinition).poll({ ...context, checkpoint: request.checkpoint });
-          const listener = (definition as IntegrationDefinition).listener;
+          if ("poll" in definition) return definition.poll({ ...context, checkpoint: request.checkpoint });
+          const listener = definition.listener;
           if (!listener) throw new HttpRequestError("invalid_input", "This Trigger cannot be read.");
           const page = await listener.read({ ...context, checkpoint: request.checkpoint });
           validateListenerPage(page);
           return page;
         }
         case "reconcile":
-          if (definition.snapshot.type !== "integration" || (definition as IntegrationDefinition).eventSource)
+          if (!("reconcile" in definition) || definition.eventSource)
             throw new HttpRequestError("invalid_input", "This Trigger has no remote webhook.");
           return executeSubscription(
             this.options.store,
-            definition as IntegrationDefinition,
-            { ...target.owner, tokenId: input.grant!.tokenId, triggerId: input.triggerId },
-            { ...request, config },
-            target.proxy,
-            input.signal,
-          );
-        case "resource":
-          if (!(definition as IntegrationDefinition).resources)
-            throw new HttpRequestError("invalid_input", "This Trigger has no shared resource.");
-          return executeResourceSubscription(
-            this.options.store,
-            (definition as IntegrationDefinition).resources!,
+            definition,
             { ...target.owner, tokenId: input.grant!.tokenId, triggerId: input.triggerId },
             { ...request, config },
             target.proxy,
@@ -153,12 +183,13 @@ export class TriggerRunner {
     record.connectionRevision = target.owner.connectionRevision;
     const definition = await this.definition(record.service, record.triggerId);
     if (record.mode === "resource") {
-      if (!(definition as IntegrationDefinition).resources)
+      if (!("resources" in definition) || !definition.resources)
         throw new HttpRequestError("trigger_not_supported", "Resource subscriptions are unavailable.", 501);
+      const resources = definition.resources;
       await this.providerOperation(record.service, () =>
         executeResourceSubscriptionOperation(
           this.options.store,
-          (definition as IntegrationDefinition).resources!,
+          resources,
           record,
           save,
           { operation: "resource", config: record.config, active: false, requestKey: record.requestKey },
@@ -167,13 +198,13 @@ export class TriggerRunner {
         ),
       );
     } else {
-      if (definition.snapshot.type !== "integration")
+      if (!("reconcile" in definition))
         throw new HttpRequestError("trigger_not_found", "The remote Trigger definition is unavailable.", 404);
       await this.providerOperation(record.service, () =>
         executeSubscriptionOperation(
           record,
           save,
-          definition as IntegrationDefinition,
+          definition,
           {
             operation: "reconcile",
             config: record.config,
@@ -191,9 +222,9 @@ export class TriggerRunner {
 
   async abandonResource(record: TriggerSubscription, signal: AbortSignal): Promise<void> {
     const definition = await this.definition(record.service, record.triggerId);
-    const resources = (definition as IntegrationDefinition).resources;
-    if (!resources) throw new HttpRequestError("trigger_not_supported", "Resource subscriptions are unavailable.", 501);
-    await abandonResourceSubscription(this.options.store, resources, record, signal);
+    if (!("resources" in definition) || !definition.resources)
+      throw new HttpRequestError("trigger_not_supported", "Resource subscriptions are unavailable.", 501);
+    await abandonResourceSubscription(this.options.store, definition.resources, record, signal);
   }
 
   private async definition(service: string, triggerId: string): Promise<IntegrationDefinition | PollDefinition> {
@@ -244,7 +275,20 @@ export class TriggerRunner {
         );
       const executor = await this.options.providerLoader.loadProxyExecutor(service);
       if (!executor) throw new HttpRequestError("trigger_not_supported", "The provider has no Trigger transport.", 501);
+      let oauthClientConfig: ConnectorProxy["oauthClientConfig"];
+      if (service === "jira" && credential.authType === "oauth2") {
+        oauthClientConfig = readOAuthClientConfigMetadata(service, credential.metadata);
+        if (!oauthClientConfig?.clientSecret) {
+          const configured = await this.options.oauthClientConfigs?.getConfig(service);
+          if (oauthClientConfig == null) oauthClientConfig = configured;
+          else if (configured?.clientId === oauthClientConfig.clientId)
+            oauthClientConfig = { ...oauthClientConfig, clientSecret: configured.clientSecret };
+        }
+      }
       const proxy: ConnectorProxy = {
+        authType: credential.authType,
+        oauthClientConfig,
+        providerAccountId: credential.profile.accountId,
         execute: async (request, requestSignal) => {
           signal.throwIfAborted();
           const result = await withProviderHttpDispatch(
@@ -268,6 +312,7 @@ export class TriggerRunner {
       };
       return {
         proxy,
+        scopes: credential.profile.grantedScopes,
         owner: {
           service,
           connectionId: stored.id,
@@ -300,7 +345,10 @@ export class TriggerRunner {
         if (error.name === "TransientIntegrationError" || error.name === "TransientPollError")
           throw new HttpRequestError("proxy_upstream_error", "The Trigger provider is temporarily unavailable.", 503);
         if (error.name === "PermanentIntegrationError" || error.name === "PermanentPollError")
-          throw new HttpRequestError("invalid_input", error.message);
+          throw new HttpRequestError(
+            error instanceof PermanentIntegrationError ? (error.reason ?? "invalid_input") : "invalid_input",
+            error.message,
+          );
       }
       throw error;
     }

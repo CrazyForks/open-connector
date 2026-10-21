@@ -1,6 +1,7 @@
 import type { IConnectionStore } from "../connection-service.ts";
 import type { ProviderHttpAttempt } from "../core/provider-http-dispatch.ts";
 import type { ProviderDefinition, ProviderProxyExecutor } from "../core/types.ts";
+import type { IntegrationReconcileContext } from "../triggers/common/integration.ts";
 import type { ConnectorProxyRequest } from "../triggers/common/proxy.ts";
 import type { ConnectApp } from "./connect-app.ts";
 
@@ -12,8 +13,10 @@ import { ActionPolicyService } from "../core/action-policy.ts";
 import { provider as feishu } from "../providers/feishu_app_bot/definition.ts";
 import { provider as github } from "../providers/github/definition.ts";
 import { provider as gmail } from "../providers/gmail/definition.ts";
+import { provider as jira } from "../providers/jira/definition.ts";
 import { provider as linear } from "../providers/linear/definition.ts";
 import { ProviderLoader } from "../providers/provider-loader.ts";
+import { provider as zoom } from "../providers/zoom/definition.ts";
 import { TriggerRunner } from "../triggers/trigger-runner.ts";
 import { createConnectApp } from "./connect-app.ts";
 import { TransitFileService } from "./files/transit-files.ts";
@@ -48,8 +51,10 @@ beforeEach(async () => {
   useNativeProxy = false;
   denyProviderDispatch = false;
   dispatchAttempts = [];
-  const sources: ProviderDefinition[] = [github, gmail, linear, feishu];
+  const sources: ProviderDefinition[] = [github, gmail, linear, feishu, zoom, jira];
   const modulePaths: Record<string, string> = {
+    jira: "../providers/jira/executors.ts",
+    zoom: "../providers/zoom/executors.ts",
     github: "../providers/github/executors.ts",
     gmail: "../providers/gmail/executors.ts",
     linear: "../providers/linear/executors.ts",
@@ -84,6 +89,12 @@ beforeEach(async () => {
               },
             };
           else if (provider.service === "feishu_app_bot") data = { code: 0, data: {} };
+          else if (provider.service === "jira")
+            data = request.endpoint.startsWith("/project/")
+              ? { id: "100", key: "TEST" }
+              : request.endpoint === "/myself"
+                ? { accountId: "user" }
+                : { baseUrl: "https://test.atlassian.net" };
           else if (request.method === "GET")
             data = request.endpoint.endsWith("/hooks")
               ? hooks
@@ -131,6 +142,7 @@ beforeEach(async () => {
     blockedActions: ["*"],
     allowedProxies: [],
     allowedTriggers: [
+      "zoom.on_recording_ready",
       "github.on_repo_event",
       "gmail.on_message_received",
       "linear.on_issue_changed",
@@ -447,6 +459,86 @@ describe("Trigger runtime HTTP boundary", () => {
     expect(hooks).toHaveLength(1);
   });
 
+  it("executes shared source initialization and preparation through the authenticated runtime endpoint", async () => {
+    const app = await database.connectionStore.set(
+      "feishu_app_bot",
+      "source",
+      credential("feishu-key", "cli_verified"),
+    );
+    const execute = (body: unknown) =>
+      request({ operation: "source", request: body }, token, app.id, "feishu_app_bot", "feishu_app_bot.on_event");
+    const created = await execute({
+      action: "initialize",
+      input: {
+        version: 1,
+        name: "Source",
+        teamId: null,
+        connectionId: app.id,
+        verificationToken: "verify",
+        encryptKey: "encrypt",
+        eventTypes: ["approval_instance"],
+        manageSubscriptions: true,
+      },
+    });
+    expect(created.status).toBe(200);
+    const result = (await created.json()) as { data: { source: { identity: string; state: Record<string, unknown> } } };
+    expect(result.data.source).toMatchObject({
+      identity: "cli_verified",
+      state: { projection: { ready: false, view: { appId: "cli_verified" } } },
+    });
+    const prepared = await execute({
+      action: "prepare",
+      source: { ...result.data.source, state: { verifiedAt: Date.now() } },
+      config: { eventTypes: ["approval_instance"], resource: { kind: "approval", id: "approval" } },
+    });
+    expect(prepared.status).toBe(200);
+    expect(await prepared.json()).toMatchObject({
+      data: { subscriptions: [{ key: '["approval","approval"]' }], source: { state: { projection: { ready: true } } } },
+    });
+    expect(
+      (await execute({ action: "initialize", input: { kind: "slack", version: 1, name: "Wrong provider" } })).status,
+    ).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("routes managed resources with their own config and persists state through cleanup", async () => {
+    const definitions = await fixtureProviderLoader.loadTriggerDefinitions("github");
+    const definition = definitions?.find((item) => item.snapshot.key === "github.on_repo_event");
+    if (!definition || !("receive" in definition)) throw new Error("Missing fixture integration");
+    const reconcileResource = vi.fn(async (context: IntegrationReconcileContext) => {
+      expect(context.config).toEqual({ projectId: "project", endpointUrl: callback });
+      expect(context.endpointUrl).toBe(callback);
+      if (!context.active) expect(context.state?.subscription).toEqual({ hookId: "managed" });
+      await context.state!.saveSubscription(context.active ? { hookId: "managed" } : {}, context.now);
+      return { outcome: "ready" as const };
+    });
+    vi.spyOn(fixtureProviderLoader, "loadTriggerDefinitions").mockResolvedValue([
+      { ...definition, resources: { reconcile: reconcileResource } },
+    ]);
+    const body = {
+      operation: "resource",
+      config: { projectId: "project", endpointUrl: callback },
+      active: true,
+      requestKey: "managed",
+    };
+    expect((await request(body, "environment-token")).status).toBe(403);
+    expect(reconcileResource).not.toHaveBeenCalled();
+    expect((await request(body)).status).toBe(200);
+    const [record] = await database.triggerStore.list();
+    expect(record).toMatchObject({
+      mode: "resource",
+      tokenId,
+      connectionId,
+      status: "active",
+      subscription: { hookId: "managed" },
+    });
+    await connector.triggerMaintenance.cancel(record!.id, new AbortController().signal);
+    expect((await database.triggerStore.getFlowTrigger(record!.id))?.status).toBe("deleted");
+    expect(reconcileResource).toHaveBeenCalledTimes(2);
+    expect(reconcileResource.mock.calls[1]![0].active).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
   it("shares Feishu resources per account and cleans only after the final owner's demand is released", async () => {
     const app = await database.connectionStore.set("feishu_app_bot", "work", credential("feishu-key", "cli_verified"));
     const body = {
@@ -592,4 +684,157 @@ describe("Trigger runtime HTTP boundary", () => {
       request: { method: "DELETE", endpoint: "/drive/v1/files/second-document/delete_subscribe" },
     });
   });
+});
+
+it.each([
+  [[], 403],
+  [["cloud_recording:read:recording"], 200],
+  [["cloud_recording:read:recording:admin"], 200],
+])("checks Zoom recording scopes before executing a source operation: %j", async (scopes, status) => {
+  const connection = await database.connectionStore.set("zoom", "work", {
+    authType: "oauth2",
+    accessToken: "zoom-token",
+    tokenType: "Bearer",
+    profile: { accountId: "account", displayName: "Zoom", grantedScopes: scopes },
+    metadata: { providerAccountVerified: true },
+  });
+  const response = await request(
+    {
+      operation: "source",
+      request: {
+        action: "inspect",
+        source: {
+          identity: "account",
+          eventTypes: ["recording.completed"],
+          config: { accountId: "account", userId: "host" },
+          secrets: { signingSecret: "secret" },
+          state: {},
+        },
+      },
+    },
+    token,
+    connection.id,
+    "zoom",
+    "zoom.on_recording_ready",
+  );
+  expect(response.status, await response.clone().text()).toBe(status);
+  expect(calls).toHaveLength(0);
+});
+
+it("requires a persistent runtime token for shared source deliveries", async () => {
+  const runner = new TriggerRunner({
+    catalog: createCatalogStore([feishu]),
+    providerLoader: fixtureProviderLoader,
+    connections: new ConnectionService({
+      catalog: createCatalogStore([feishu]),
+      store: database.connectionStore,
+      providerLoader: fixtureProviderLoader,
+    }),
+    store: database.triggerStore,
+  });
+  await expect(
+    runner.run({
+      service: "feishu_app_bot",
+      triggerId: "feishu_app_bot.on_event",
+      policy: new ActionPolicyService().createSnapshot(),
+      signal: new AbortController().signal,
+      request: {
+        operation: "source",
+        request: {
+          action: "receive",
+          source: { identity: "app", eventTypes: [], config: {}, secrets: {}, state: {} },
+          headers: {},
+          rawBody: "e30=",
+          consumers: [],
+        },
+      },
+    }),
+  ).rejects.toMatchObject({ code: "trigger_owner_required" });
+});
+
+it.each([
+  [undefined, "app", true],
+  ["", "app", true],
+  [undefined, "different-app", false],
+  ["connection-secret", "different-app", true],
+])(
+  "uses a matching Jira client fallback without mixing OAuth applications: %s %s",
+  async (secret, configuredId, accepted) => {
+    const connection = await database.connectionStore.set("jira", "work", {
+      authType: "oauth2",
+      accessToken: "jira-token",
+      tokenType: "Bearer",
+      profile: { accountId: "jira:cloud:user", displayName: "Jira", grantedScopes: [] },
+      metadata: { providerAccountVerified: true, oauthClientConfig: { clientId: "app", clientSecret: secret } },
+    });
+    const catalog = createCatalogStore([jira]);
+    const getConfig = vi.fn(async () => ({
+      service: "jira",
+      clientId: configuredId,
+      clientSecret: "service-secret",
+      extra: {},
+      secretExtra: {},
+    }));
+    const runner = new TriggerRunner({
+      catalog,
+      providerLoader: fixtureProviderLoader,
+      store: database.triggerStore,
+      oauthClientConfigs: { getConfig },
+      connections: new ConnectionService({
+        catalog,
+        providerLoader: fixtureProviderLoader,
+        store: database.connectionStore,
+      }),
+    });
+    const result = runner.run({
+      service: "jira",
+      triggerId: "jira.on_issue_event",
+      connectionId: connection.id,
+      policy: new ActionPolicyService().createSnapshot(),
+      signal: new AbortController().signal,
+      request: {
+        operation: "source",
+        request: {
+          action: "initialize",
+          input: {
+            kind: "jira",
+            version: 1,
+            name: "Project",
+            connectionId: connection.id,
+            teamId: null,
+            project: "TEST",
+            eventTypes: ["jira:issue_created"],
+          },
+        },
+      },
+    });
+    if (accepted)
+      await expect(result).resolves.toMatchObject({ source: { config: { projectId: "100", cloudId: "cloud" } } });
+    else {
+      await expect(result).rejects.toMatchObject({ code: "trigger_connection_error" });
+      expect(calls).toHaveLength(0);
+    }
+    expect(getConfig).toHaveBeenCalledTimes(secret ? 0 : 1);
+  },
+);
+
+it("rejects case-insensitive duplicate headers in shared source requests", async () => {
+  const { readTriggerRequest } = await import("../triggers/request.ts");
+  const operation = {
+    operation: "source",
+    request: {
+      action: "receive",
+      source: { identity: "app", eventTypes: [], config: {}, secrets: {}, state: {} },
+      rawBody: "e30=",
+      consumers: [],
+      headers: { Authorization: "token" },
+    },
+  };
+  expect(() => readTriggerRequest(operation)).not.toThrow();
+  expect(() =>
+    readTriggerRequest({
+      ...operation,
+      request: { ...operation.request, headers: { Authorization: "token", authorization: "another" } },
+    }),
+  ).toThrow();
 });
