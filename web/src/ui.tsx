@@ -421,7 +421,7 @@ function AppShell(props: {
             </Button>
           </div>
           <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-            <DialogContent className="console-settings-panel">
+            <DialogContent className="console-settings-panel translate-x-0 translate-y-0">
               <DialogHeader>
                 <DialogTitle>{t("shell.settings")}</DialogTitle>
                 <DialogDescription>{t("shell.settingsDescription")}</DialogDescription>
