@@ -811,7 +811,7 @@ async function notionQueryDataSource(input: Record<string, unknown>, accessToken
         sorts: Array.isArray(input.sorts) ? input.sorts : undefined,
         page_size: asNumber(input.pageSize),
         start_cursor: asNonEmptyString(input.startCursor),
-        in_trash: typeof input.in_trash === "boolean" ? input.in_trash : undefined,
+        is_archived: typeof input.is_archived === "boolean" ? input.is_archived : undefined,
         result_type: asNonEmptyString(input.result_type),
       }),
     },

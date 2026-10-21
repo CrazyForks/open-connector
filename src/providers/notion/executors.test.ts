@@ -132,6 +132,62 @@ describe("notion.get_current_user", () => {
   });
 });
 
+describe("notion.query_data_source", () => {
+  const action = notionActions.find((candidate) => candidate.name === "query_data_source")!;
+
+  it.each([{}, { is_archived: false }, { is_archived: true }])(
+    "sends the documented query body for archive input %j",
+    async (archiveInput) => {
+      const filter = { property: "Status", status: { equals: "Done" } };
+      const sorts = [{ timestamp: "created_time", direction: "descending" }];
+      const input = {
+        dataSourceId: "data-source-1",
+        filter,
+        sorts,
+        pageSize: 10,
+        startCursor: "cursor-1",
+        filterProperties: ["status"],
+        result_type: "page",
+        ...archiveInput,
+      };
+      const output = { object: "list", results: [], next_cursor: null, has_more: false };
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(output));
+      vi.stubGlobal("fetch", fetcher);
+      try {
+        const result = await executors["notion.query_data_source"]!(input, contextFor(grant(userGrant())));
+        expect(result).toEqual({ ok: true, output });
+        expect(fetcher).toHaveBeenCalledTimes(1);
+        const [url, init] = fetcher.mock.calls[0]!;
+        const requestUrl = new URL(String(url));
+        expect(requestUrl.origin + requestUrl.pathname).toBe(
+          "https://api.notion.com/v1/data_sources/data-source-1/query",
+        );
+        expect(requestUrl.searchParams.getAll("filter_properties[]")).toEqual(["status"]);
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body));
+        expect(body).toStrictEqual({
+          filter,
+          sorts,
+          page_size: 10,
+          start_cursor: "cursor-1",
+          result_type: "page",
+          ...archiveInput,
+        });
+        expect(body).not.toHaveProperty("in_trash");
+        expect(validateActionInput(action, input).valid).toBe(true);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it("advertises is_archived and rejects in_trash as a query input", () => {
+    expect(action.inputSchema.properties).not.toHaveProperty("in_trash");
+    expect(action.inputSchema.properties).toHaveProperty("is_archived", expect.objectContaining({ type: "boolean" }));
+    expect(validateActionInput(action, { dataSourceId: "data-source-1", in_trash: false }).valid).toBe(false);
+  });
+});
+
 describe("notion.retrieve_page_markdown", () => {
   const PAGE = "7B2E4C1A-9D3F-4E5B-8A6C-1F2D3E4B5A60";
 

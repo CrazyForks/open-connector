@@ -704,7 +704,9 @@ export const notionActions: ActionDefinition[] = [
         filterProperties: s.array(s.string({ minLength: 1 }), {
           description: "Property IDs to include.",
         }),
-        in_trash: s.boolean({ description: "Whether to query trashed pages." }),
+        is_archived: s.boolean({
+          description: "Set to true to query archived pages; false or omitted queries non-archived pages.",
+        }),
         result_type: s.string({ description: "The Notion result type filter." }),
       },
       { required: ["dataSourceId"], description: "The input payload for this action." },
