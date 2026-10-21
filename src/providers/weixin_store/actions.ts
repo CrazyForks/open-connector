@@ -313,6 +313,20 @@ const productManagePermission = "Manage the products of the connected WeChat Sto
 const orderManagePermission = "Manage the orders of the connected WeChat Store";
 const aftersaleManagePermission = "Manage the after-sale orders of the connected WeChat Store";
 
+const leaguePermission =
+  "WeChat Store alliance access must be enabled and approved; service providers require permission set 141";
+const leaguePlanIdentity = {
+  type: s.union([s.literal(100), s.literal(300)], {
+    description:
+      "100 = all talents, 300 = specified talents. These endpoints do not support filtered audience type 200.",
+  }),
+  productId: numericIdInput("The existing product id; must be a safe positive integer."),
+  promotionPlanId: numericIdInput("The existing promotion plan id; must be a safe positive integer."),
+};
+const leaguePlanStatus = s.integer(
+  "1 active, 2 delisted, 4 deleted, 5 ineligible, 7 product delisted, 8 expired, 9 banned, 10 pending activation.",
+);
+
 export const weixinStoreActions: ProviderActionDefinition[] = [
   defineProviderAction(service, {
     name: "upload_qualification_image",
@@ -819,5 +833,385 @@ export const weixinStoreActions: ProviderActionDefinition[] = [
     ),
     outputSchema: emptyOutputSchema,
     providerPermissions: [aftersaleManagePermission],
+  }),
+  defineProviderAction(service, {
+    name: "list_league_promoters",
+    operationType: "read",
+    description:
+      "List the connected merchant's alliance talents. This is not a platform-wide talent search; follow continue_flag to paginate.",
+    inputSchema: s.actionInput(
+      {
+        pageIndex: s.positiveInteger("The 1-based page index.", { default: 1 }),
+        pageSize: s.positiveInteger("The number of talents per page, at most 20.", { maximum: 20, default: 20 }),
+      },
+      [],
+      "Merchant alliance talent pagination.",
+    ),
+    outputSchema: s.looseObject("The merchant alliance talent page.", {
+      total_num: s.integer("The total number of talents."),
+      continue_flag: s.boolean("Whether another page is available."),
+      list: s.array(
+        "The talents in this page.",
+        s.looseObject("One talent.", {
+          talent_appid: s.string("The talent appid used by get_league_promoter."),
+          nickname: s.string("The talent nickname; not a lookup identifier."),
+        }),
+      ),
+    }),
+    providerPermissions: [leaguePermission],
+  }),
+  defineProviderAction(service, {
+    name: "get_league_promoter",
+    operationType: "read",
+    description:
+      "Read a known alliance talent's profile, sales metrics and blacklist status. Supply exactly one talent identifier, not a nickname.",
+    inputSchema: s.requireExactlyOneProperty(
+      s.actionInput(
+        {
+          talentAppid: s.nonEmptyString("The talent_appid returned by list_league_promoters."),
+          talentSearchKey: s.nonEmptyString(
+            "A talent appid or WeChat Channels finder_id; not a nickname or a third-party search id.",
+          ),
+        },
+        [],
+        "Exactly one known talent identifier.",
+      ),
+      ["talentAppid", "talentSearchKey"],
+    ),
+    outputSchema: s.looseObject("The alliance talent detail.", {
+      talent: s.looseObject("The talent profile and metrics.", {
+        base_talent_info: s.looseObject("Talent identity.", {
+          talent_appid: s.string("The talent appid."),
+          nickname: s.string("The nickname."),
+          head_img: s.string("The avatar URL."),
+        }),
+        data: s.looseObject("Upstream sales and window metrics.", {
+          total_sale_gmv: s.number("Lifetime sales GMV, in upstream units."),
+          sale_gmv_30d: s.number("30-day sales GMV, in upstream units."),
+          total_order_num: s.number("Lifetime orders."),
+          order_num_30d: s.number("30-day orders."),
+          sale_product_num_30d: s.number("Products sold in 30 days."),
+          window_product_num: s.number("Products in the talent window."),
+        }),
+        feature_info: s.looseObject("Talent features.", {
+          level: s.integer("The upstream level, 0 through 5."),
+          is_blacklisted: s.boolean("Whether the talent is blacklisted."),
+        }),
+      }),
+    }),
+    providerPermissions: [leaguePermission],
+  }),
+  defineProviderAction(service, {
+    name: "get_compass_product_data",
+    operationType: "read",
+    description:
+      "Read historical Compass product click and transaction data. T+1 only: date must be yesterday or earlier in Asia/Shanghai. Monetary values and counts retain upstream string units.",
+    inputSchema: s.actionInput(
+      {
+        date: s.withExamples(
+          s.stringPattern("^[0-9]{8}$", {
+            description: "A valid historical date as YYYYMMDD, yesterday or earlier in Asia/Shanghai.",
+          }),
+          ["20240520"],
+        ),
+        productId: numericIdInput("The product id, no greater than JavaScript's maximum safe integer."),
+      },
+      ["date", "productId"],
+      "A historical product data query.",
+    ),
+    outputSchema: s.looseObject("Historical product data; upstream fields and nullable ratios are preserved.", {
+      product_info: s.looseObject("The product and historical metrics.", {
+        product_id: s.string("The product id."),
+        head_img_url: s.string("The product image URL."),
+        title: s.string("The title."),
+        price: s.string("The price in fen, as an upstream string."),
+        first_category_id: s.string("The first-level category id."),
+        second_category_id: s.string("The second-level category id."),
+        third_category_id: s.string("The third-level category id."),
+        data: s.looseObject("Raw Compass metrics; monetary values are in fen and ratios can be null.", {
+          product_click_uv: s.string("Unique product click visitors."),
+          product_click_cnt: s.string("Product clicks."),
+          pay_gmv: s.string("Paid GMV in fen."),
+          pay_cnt: s.string("Paid orders."),
+          pay_uv: s.string("Paying users."),
+          pay_product_cnt: s.string("Paid product quantity."),
+        }),
+      }),
+    }),
+    providerPermissions: ["WeChat Store Compass data access; service providers require permission set 175"],
+  }),
+  defineProviderAction(service, {
+    name: "get_product_restricted_info",
+    operationType: "read",
+    description:
+      "Read restricted sales scenes for 1 to 50 products, including alliance and talent-window restrictions. This does not change product status. Merchant quota: 100 calls per minute.",
+    inputSchema: s.actionInput(
+      {
+        productIds: s.array(
+          "Product ids, each no greater than JavaScript's maximum safe integer.",
+          numericIdInput("A product id."),
+          { minItems: 1, maxItems: 50 },
+        ),
+      },
+      ["productIds"],
+      "Products to inspect for scene restrictions.",
+    ),
+    outputSchema: s.looseObject("Product scene restrictions.", {
+      data: s.looseObject("The restriction response data.", {
+        restricted_info_list: s.array(
+          "Restrictions per product.",
+          s.looseObject("One product's restricted scenes.", {
+            product_id: numericIdInput("The product id, returned as a number or numeric string."),
+            scene_info: s.array(
+              "Restricted scenes and policy sources.",
+              s.looseObject("One restriction.", {
+                scene: s.integer(
+                  "1 live, 2 short video, 3 store home/talent window, 4 search, 5 ads, 6 orders/cards, 7 alliance, 8 recommendation, 9 selling, 10 invalid-product hiding.",
+                ),
+                source: s.integer(
+                  "1 low-risk policy, 2 similar-product policy, 3 hidden-image policy, 4 trial category, 5 window hiding, 6 minimal mode, 7 selling restriction, 8 inventory restriction.",
+                ),
+              }),
+            ),
+          }),
+        ),
+      }),
+    }),
+    providerPermissions: ["WeChat Store product access; service providers require permission set 129"],
+  }),
+  defineProviderAction(service, {
+    name: "list_league_promoter_products",
+    operationType: "read",
+    description:
+      "Read a known cooperating talent's current window products or products sold in the last 30 days. This does not discover new talents or add products to a window.",
+    inputSchema: s.actionInput(
+      {
+        talentAppid: s.nonEmptyString("The cooperating talent appid."),
+        dataType: s.union([s.literal(1), s.literal(2)], {
+          description: "1 = products with sales in the last 30 days, 2 = current window products.",
+        }),
+        pageIndex: s.positiveInteger("The 1-based page index.", { default: 1 }),
+        pageSize: s.positiveInteger("Page size, at most 20.", { maximum: 20, default: 20 }),
+      },
+      ["talentAppid", "dataType"],
+      "A cooperating talent's product data page.",
+    ),
+    outputSchema: s.looseObject("Talent product data page.", {
+      total_num: s.integer("Total matching products."),
+      continue_flag: s.boolean("Whether another page exists."),
+      list: s.array(
+        "Product data.",
+        s.looseObject("One product.", {
+          spu_id: s.integer("The product id."),
+          product_data: s.looseObject("Sales metrics.", {
+            total_sale_gmv: s.number("Lifetime sales GMV, in upstream units."),
+            sale_gmv_30d: s.number("30-day sales GMV, in upstream units."),
+            total_order_num: s.number("Lifetime orders."),
+            order_num_30d: s.number("30-day orders."),
+          }),
+          talent_commission_info: s.looseObject("Commission information; read only.", {
+            commission_type: s.integer("1 ordinary, 2 targeted, 3 exclusive."),
+            ratio: s.integer("Commission ratio on the upstream 0–1000000 scale; 1000000 means 100%."),
+          }),
+        }),
+      ),
+    }),
+    providerPermissions: [leaguePermission],
+  }),
+  defineProviderAction(service, {
+    name: "list_product_promotion_talents",
+    operationType: "read",
+    description:
+      "Read talents related to one existing product promotion plan and their promotion relationship status. This is not platform-wide discovery and does not prove that a product is in a talent's window.",
+    inputSchema: s.actionInput(
+      {
+        productId: leaguePlanIdentity.productId,
+        promotionPlanId: leaguePlanIdentity.promotionPlanId,
+        talentAppid: s.nonEmptyString("Optional talent appid filter."),
+        pageIndex: s.positiveInteger("The 1-based page index.", { default: 1 }),
+        pageSize: s.positiveInteger("Page size, at most 10.", { maximum: 10, default: 10 }),
+      },
+      ["productId", "promotionPlanId"],
+      "One existing promotion plan's talent page.",
+    ),
+    outputSchema: s.looseObject("Promotion talent relationships.", {
+      total_num: s.integer("Total matching records."),
+      continue_flag: s.boolean("Whether another page exists."),
+      list: s.array(
+        "Related talents.",
+        s.looseObject("One relationship.", {
+          base_talent_info: s.looseObject("Talent identity.", {
+            nickname: s.string("The nickname."),
+            head_img: s.string("The avatar URL."),
+            talent_appid: s.string("The talent appid."),
+          }),
+          commission_info: s.looseObject("Read-only commission terms.", {
+            promotion_plan_id: s.integer("The plan id."),
+            promotion_plan_type: s.integer("The plan type."),
+            ratio: s.integer(
+              "Upstream scale: 1000000 means 100%; not the 0–90 percentage scale of update_league_plan.",
+            ),
+          }),
+          talent_relation_status: s.integer("1 promoting, 4 removed, 10 blacklisted."),
+        }),
+      ),
+    }),
+    providerPermissions: [leaguePermission],
+  }),
+  defineProviderAction(service, {
+    name: "get_product_audit_strategy",
+    operationType: "read",
+    description:
+      "Read store-wide product listing policy switches. This is not a historical delisting-reason log and does not change any policy.",
+    inputSchema: emptyInput,
+    outputSchema: s.looseObject("Store listing policy.", {
+      audit_strategy: s.looseObject("Each switch is 1 enabled or 2 disabled.", {
+        hide_err_field_flag: s.integer("List with erroneous product information hidden."),
+        hit_duplicated_flag: s.integer("Allow similar products."),
+        hit_low_risk_rule_flag: s.integer("Allow products matching low-risk rules."),
+      }),
+    }),
+    providerPermissions: ["WeChat Store product access; service providers require permission set 129"],
+  }),
+  defineProviderAction(service, {
+    name: "list_product_promotion_plans",
+    operationType: "read",
+    description:
+      "List an existing product's alliance promotion plan identifiers before inspecting or changing a specific plan. Filtered audience type 200 is supported by this list only, not get_league_plan or update_league_plan.",
+    inputSchema: s.actionInput(
+      {
+        productId: leaguePlanIdentity.productId,
+        promotionPlanType: s.union([s.literal(100), s.literal(200), s.literal(300)], {
+          description: "100 all, 200 filtered, 300 specified talents.",
+        }),
+        pageIndex: s.positiveInteger("The 1-based page index.", { default: 1 }),
+        pageSize: s.positiveInteger("Page size, at most 20.", { maximum: 20, default: 20 }),
+      },
+      ["productId"],
+      "The product's existing promotion plans.",
+    ),
+    outputSchema: s.looseObject("The promotion plan page.", {
+      total_num: s.integer("Total matching records."),
+      continue_flag: s.boolean("Whether another page exists."),
+      list: s.array(
+        "Existing plan identifiers.",
+        s.looseObject("One plan.", {
+          promotion_plan_id: s.nullable(s.integer("The plan id.")),
+          promotion_plan_type: s.nullable(s.integer("100 all, 200 filtered, 300 specified talents.")),
+        }),
+      ),
+    }),
+    providerPermissions: [leaguePermission],
+  }),
+  defineProviderAction(service, {
+    name: "list_league_products",
+    operationType: "read",
+    description:
+      "List existing alliance products and eligibility status. Pagination is bounded by pageSize multiplied by pageIndex <= 5000; no undocumented cursor is sent.",
+    inputSchema: s.actionInput(
+      {
+        pageIndex: s.positiveInteger("The 1-based page index.", { default: 1 }),
+        pageSize: s.positiveInteger("Page size, at most 100.", { maximum: 100, default: 20 }),
+        productId: leaguePlanIdentity.productId,
+        needTotalNum: s.boolean("Request the total count."),
+      },
+      [],
+      "An alliance product page.",
+    ),
+    outputSchema: s.looseObject("Alliance products.", {
+      items: s.array(
+        "Products and eligibility.",
+        s.looseObject("One alliance product.", {
+          product_id: numericIdInput("The product id, returned as a number or numeric string."),
+          status: leaguePlanStatus,
+        }),
+      ),
+      has_more: s.boolean("Whether more products exist."),
+      total_num: s.integer("Total products when requested."),
+    }),
+    providerPermissions: [leaguePermission],
+  }),
+  defineProviderAction(service, {
+    name: "get_league_plan",
+    operationType: "read",
+    description:
+      "Read an existing alliance plan's activation, eligibility and commission. The returned item.type uses legacy values 1/2/3; do not reuse it as request type 100/300.",
+    inputSchema: s.actionInput(
+      leaguePlanIdentity,
+      ["type", "productId"],
+      "An existing all-talent or specified-talent plan; include promotionPlanId to inspect a specific plan.",
+    ),
+    outputSchema: s.looseObject("Alliance plan detail.", {
+      item: s.looseObject("The existing plan.", {
+        product_id: s.union([s.integer("Product id as a number."), s.string("Product id as an upstream string.")]),
+        type: s.integer("Legacy response type: 1 ordinary, 2 targeted, 3 exclusive; not request audience type."),
+        status: leaguePlanStatus,
+        ratio: s.number("Commission percentage, 0–90; not the 0–1000000 talent-data scale."),
+        exclusive_info: s.looseObject("Upstream plan identity, timing and talent information."),
+        ext_info: s.looseObject("Upstream restriction flags."),
+      }),
+    }),
+    providerPermissions: [leaguePermission],
+  }),
+  defineProviderAction(service, {
+    name: "invite_league_promoter",
+    operationType: "write",
+    description:
+      "Invite one known talent to cooperate with the shop. This sends an external invitation: obtain approval for the exact recipient first. Supply promoterId or the deprecated finderId, never infer promoterId from talent_appid. Do not retry blindly after a timeout; WeChat rejects duplicate invitations within 24 hours and already-cooperating talents.",
+    inputSchema: s.requireExactlyOneProperty(
+      s.actionInput(
+        {
+          promoterId: s.nonEmptyString(
+            "The verified talent promoter_id (talent selling id), not an unverified talent_appid or third-party id.",
+          ),
+          finderId: s.nonEmptyString(
+            "The verified WeChat Channels finder_id. Deprecated upstream; prefer promoterId when known.",
+          ),
+        },
+        [],
+        "Exactly one verified invitation recipient.",
+      ),
+      ["promoterId", "finderId"],
+    ),
+    outputSchema: emptyOutputSchema,
+    providerPermissions: [leaguePermission],
+  }),
+  defineProviderAction(service, {
+    name: "update_league_plan",
+    operationType: "write",
+    description:
+      "Change one existing alliance promotion plan: edit commission and activate (1), delist (2), or activate (4). Obtain approval for the exact plan and change first; activation or commission changes can incur commission spending. Read the plan before and after; no automatic fallback, audience changes, new plan creation or deletion is provided.",
+    inputSchema: s.oneOf(
+      [
+        s.actionInput(
+          {
+            ...leaguePlanIdentity,
+            operateType: s.literal(1, { description: "Edit commission and activate." }),
+            ratio: s.number("Commission percentage, 0–90 (not the 0–1000000 read scale).", { minimum: 0, maximum: 90 }),
+          },
+          ["type", "productId", "promotionPlanId", "operateType", "ratio"],
+          "Approved commission edit and activation.",
+        ),
+        s.actionInput(
+          {
+            ...leaguePlanIdentity,
+            operateType: s.union([s.literal(2), s.literal(4)], {
+              description: "2 = delist, 4 = activate. No commission fields accepted.",
+            }),
+          },
+          ["type", "productId", "promotionPlanId", "operateType"],
+          "Approved activation-state change only.",
+        ),
+      ],
+      { description: "One approved existing-plan update; commission is required only for edit-and-activate." },
+    ),
+    outputSchema: s.looseObject("The upstream update result; inspect failures and reread actual state.", {
+      promotion_plan_id: s.integer("The updated plan id."),
+      fail_talent_appids: s.array(
+        "Talents that failed to update; a nonempty list means partial failure.",
+        s.string("A talent appid."),
+      ),
+    }),
+    providerPermissions: [leaguePermission],
   }),
 ];
