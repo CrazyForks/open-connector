@@ -13,6 +13,7 @@ it("escapes untrusted client metadata and the consent handle", () => {
       scope: ["mcp:access"],
     },
     '" autofocus onfocus="alert(1)',
+    ["mcp:access", "offline_access", "evil<script>"],
   );
   expect(html).not.toContain("<img");
   expect(html).not.toContain("<script>");
@@ -20,4 +21,8 @@ it("escapes untrusted client metadata and the consent handle", () => {
   expect(html).toContain("&#60;img");
   expect(html).toContain('type="password"');
   expect(html).toContain("including write Actions");
+  expect(html).toContain("<code>mcp:access</code>");
+  expect(html).toContain("<code>offline_access</code>");
+  expect(html).toContain("<code>evil&#60;script&#62;</code>");
+  expect(html).toContain("Keep this connection active for up to 30 days");
 });

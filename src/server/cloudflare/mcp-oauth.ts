@@ -36,6 +36,8 @@ export interface McpOAuthHandler {
 type RuntimeHandler = (request: Request, env: CloudflareEnv) => Promise<Response>;
 
 const accessScope = "mcp:access";
+/** The scopes the consent page shows and the approval grants, so the two cannot drift. */
+const grantedScopes = [accessScope, "offline_access"];
 const authorizePath = "/oauth/mcp/authorize";
 
 /** Add MCP OAuth at the Worker boundary without changing administrator or runtime-token auth. */
@@ -103,7 +105,9 @@ export function createMcpOAuthHandler(origin: string, runtime: RuntimeHandler): 
             // same-origin keeps CSRF validation usable without leaking the authorization URL to the callback.
             consent.headers.set("Referrer-Policy", "same-origin");
             consent.headers.set("X-Content-Type-Options", "nosniff");
-            return new Response(renderMcpConsentPage(details, consent.handle), { headers: consent.headers });
+            return new Response(renderMcpConsentPage(details, consent.handle, grantedScopes), {
+              headers: consent.headers,
+            });
           }
           if (request.method !== "POST") return localError("Method not allowed.", 405);
           if (request.headers.get("origin") !== origin) return localError("Invalid request origin.", 403);
@@ -126,7 +130,7 @@ export function createMcpOAuthHandler(origin: string, runtime: RuntimeHandler): 
           if (!sameToken(form.get("admin_token") ?? "", env.OOMOL_CONNECT_ADMIN_TOKEN.trim())) {
             return localError("Invalid administrator token. Go back and try again.", 401);
           }
-          const approved = await oauth.approveConsent(request, handle, { scope: [accessScope, "offline_access"] });
+          const approved = await oauth.approveConsent(request, handle, { scope: [...grantedScopes] });
           const client = await oauth.describeConsent(approved.request);
           const tokens = runtimeTokens(env);
           const backing = await tokens.createToken(`MCP OAuth • ${client.clientName.slice(0, 120)}`, {
