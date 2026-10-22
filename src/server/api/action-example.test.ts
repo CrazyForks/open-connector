@@ -282,3 +282,25 @@ describe("buildExampleInput", () => {
     });
   });
 });
+
+it("satisfies URI patterns and positive choices written as double negation", () => {
+  const inputSchema: JsonSchema = {
+    type: "object",
+    required: ["url", "formats"],
+    properties: {
+      url: { type: "string", format: "uri", pattern: "^https://example\\.com/profile/[a-z]+$" },
+      formats: {
+        type: "object",
+        properties: { html: { type: "boolean" }, markdown: { type: "boolean" } },
+        additionalProperties: false,
+        not: {
+          allOf: [
+            { not: { required: ["html"], properties: { html: { const: true } } } },
+            { not: { required: ["markdown"], properties: { markdown: { const: true } } } },
+          ],
+        },
+      },
+    },
+  };
+  expect(validateActionInput({ ...action, inputSchema }, buildExampleInput(inputSchema)).valid).toBe(true);
+});

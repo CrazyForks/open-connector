@@ -37,7 +37,7 @@ const personIdentity = s.requireAnyProperty(
   ["firstName", "lastName", "name", "email", "hashedEmail", "organizationName", "domain", "personId", "linkedinUrl"],
 );
 
-export const enrichApolloPersonAction: ActionDefinition = defineProviderAction(service, {
+const enrichApolloPersonAction: ActionDefinition = defineProviderAction(service, {
   name: "enrich_apollo_person",
   operationType: "read",
   description: "Enrich one person from known identifiers using Apollo's global database.",
@@ -46,7 +46,7 @@ export const enrichApolloPersonAction: ActionDefinition = defineProviderAction(s
   outputSchema: apolloOutput,
 });
 
-export const enrichApolloPeopleAction: ActionDefinition = defineProviderAction(service, {
+const enrichApolloPeopleAction: ActionDefinition = defineProviderAction(service, {
   name: "enrich_apollo_people",
   operationType: "read",
   description: "Enrich up to ten people from known identifiers in one Apollo request.",
@@ -57,7 +57,7 @@ export const enrichApolloPeopleAction: ActionDefinition = defineProviderAction(s
   outputSchema: apolloOutput,
 });
 
-export const enrichApolloOrganizationAction: ActionDefinition = defineProviderAction(service, {
+const enrichApolloOrganizationAction: ActionDefinition = defineProviderAction(service, {
   name: "enrich_apollo_organization",
   operationType: "read",
   description: "Enrich one organization from its domain using Apollo's global database.",
@@ -68,7 +68,7 @@ export const enrichApolloOrganizationAction: ActionDefinition = defineProviderAc
   outputSchema: apolloOutput,
 });
 
-export const enrichApolloOrganizationsAction: ActionDefinition = defineProviderAction(service, {
+const enrichApolloOrganizationsAction: ActionDefinition = defineProviderAction(service, {
   name: "enrich_apollo_organizations",
   operationType: "read",
   description: "Enrich multiple organizations from their domains in one Apollo request.",
@@ -83,7 +83,7 @@ export const enrichApolloOrganizationsAction: ActionDefinition = defineProviderA
   outputSchema: apolloOutput,
 });
 
-export const searchApolloPeopleAction: ActionDefinition = defineProviderAction(service, {
+const searchApolloPeopleAction: ActionDefinition = defineProviderAction(service, {
   name: "search_apollo_people",
   operationType: "read",
   description: "Search Apollo's global people database by role, location, employer, and seniority.",
@@ -136,7 +136,7 @@ export const searchApolloPeopleAction: ActionDefinition = defineProviderAction(s
   outputSchema: apolloOutput,
 });
 
-export const searchApolloOrganizationsAction: ActionDefinition = defineProviderAction(service, {
+const searchApolloOrganizationsAction: ActionDefinition = defineProviderAction(service, {
   name: "search_apollo_organizations",
   operationType: "read",
   description: "Search Apollo's global organization database by domain, location, size, and name.",
@@ -179,7 +179,7 @@ export const searchApolloOrganizationsAction: ActionDefinition = defineProviderA
   outputSchema: apolloOutput,
 });
 
-export const getApolloOrganizationAction: ActionDefinition = defineProviderAction(service, {
+const getApolloOrganizationAction: ActionDefinition = defineProviderAction(service, {
   name: "get_apollo_organization",
   operationType: "read",
   description: "Get one complete organization record from Apollo's global database.",
@@ -190,7 +190,7 @@ export const getApolloOrganizationAction: ActionDefinition = defineProviderActio
   outputSchema: apolloOutput,
 });
 
-export const getApolloJobPostingsAction: ActionDefinition = defineProviderAction(service, {
+const getApolloJobPostingsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_apollo_job_postings",
   operationType: "read",
   description: "List live job postings for an Apollo organization.",
@@ -207,7 +207,7 @@ export const getApolloJobPostingsAction: ActionDefinition = defineProviderAction
   outputSchema: apolloOutput,
 });
 
-export const searchApolloCompanyNewsAction: ActionDefinition = defineProviderAction(service, {
+const searchApolloCompanyNewsAction: ActionDefinition = defineProviderAction(service, {
   name: "search_apollo_company_news",
   operationType: "read",
   description: "Search Apollo news articles for known organizations and event categories.",

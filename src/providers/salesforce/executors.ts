@@ -12,18 +12,26 @@ import {
 } from "../provider-runtime.ts";
 import { createSalesforceContext } from "./context.ts";
 import { salesforceAnalyticsHandlers } from "./runtime-analytics.ts";
+import { salesforceApprovalHandlers } from "./runtime-approvals.ts";
 import { salesforceAutomationHandlers } from "./runtime-automation.ts";
 import { salesforceBaseHandlers } from "./runtime-base.ts";
 import { salesforceBulkHandlers } from "./runtime-bulk.ts";
+import { salesforceChatterHandlers } from "./runtime-chatter.ts";
 import { salesforceDataHandlers } from "./runtime-data.ts";
 import { salesforceFileHandlers } from "./runtime-files.ts";
+import { salesforceKnowledgeHandlers } from "./runtime-knowledge.ts";
+import { salesforceLeadHandlers } from "./runtime-leads.ts";
+import { salesforcePlatformHandlers } from "./runtime-platform.ts";
 import { readSalesforceError, salesforceOrigin, salesforceRequest } from "./transport.ts";
-
 export { oauth } from "./oauth.ts";
-
 const handlers: Record<string, (input: Record<string, unknown>, context: OAuthProviderContext) => Promise<unknown>> =
   {};
 for (const [name, handler] of Object.entries({
+  ...salesforceApprovalHandlers,
+  ...salesforceChatterHandlers,
+  ...salesforceKnowledgeHandlers,
+  ...salesforceLeadHandlers,
+  ...salesforcePlatformHandlers,
   ...salesforceBaseHandlers,
   ...salesforceDataHandlers,
   ...salesforceAnalyticsHandlers,
@@ -34,7 +42,6 @@ for (const [name, handler] of Object.entries({
   handlers[name] = (input, context) => handler(input, createSalesforceContext(context, input));
 }
 export const executors: ProviderExecutors = defineOAuthProviderExecutors("salesforce", handlers);
-
 export const proxy: ProviderProxyExecutor = defineProviderProxy({
   service: "salesforce",
   async baseUrl(context, service) {
@@ -45,7 +52,6 @@ export const proxy: ProviderProxyExecutor = defineProviderProxy({
   auth: { type: "oauth_bearer" },
   readError: readSalesforceError,
 });
-
 export const credentialValidators: CredentialValidators = {
   async oauth2(credential, { fetcher, signal }) {
     const metadata = credential.providerSecret;

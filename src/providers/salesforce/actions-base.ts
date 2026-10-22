@@ -15,7 +15,21 @@ import {
   externalIdField,
   externalId,
 } from "./schemas.ts";
-
+const writeControls = {
+  assignmentRule: s.anyOf(
+    "Apply active assignment rules with true, disable with false, or use a specific AssignmentRule ID. Omit to retain Salesforce defaults.",
+    [s.boolean("Whether to apply active assignment rules."), recordId],
+  ),
+  duplicateRule: s.object(
+    "Duplicate detection options; omitted values retain Salesforce defaults.",
+    {
+      allowSave: s.boolean("Acknowledge a duplicate alert and allow saving when the rule permits it."),
+      includeRecordDetails: s.boolean("Return fields of detected duplicate records."),
+      runAsCurrentUser: s.boolean("Use current user sharing rules for duplicate detection."),
+    },
+    { optional: ["allowSave", "includeRecordDetails", "runAsCurrentUser"] },
+  ),
+};
 export const salesforceBaseActions: ActionDefinition[] = [
   defineProviderAction("salesforce", {
     name: "list_objects",
@@ -101,7 +115,7 @@ export const salesforceBaseActions: ActionDefinition[] = [
     description: "Create one standard or custom Salesforce record.",
     operationType: "write",
     requiredScopes: ["api"],
-    inputSchema: s.actionInput({ apiVersion, objectName, fields }, ["objectName", "fields"]),
+    inputSchema: s.actionInput({ apiVersion, objectName, fields, ...writeControls }, ["objectName", "fields"]),
     outputSchema: mutationResult,
   }),
   defineProviderAction("salesforce", {
@@ -109,7 +123,11 @@ export const salesforceBaseActions: ActionDefinition[] = [
     description: "Update supplied fields on a Salesforce record; omitted fields remain unchanged.",
     operationType: "write",
     requiredScopes: ["api"],
-    inputSchema: s.actionInput({ apiVersion, objectName, recordId, fields }, ["objectName", "recordId", "fields"]),
+    inputSchema: s.actionInput({ apiVersion, objectName, recordId, fields, ...writeControls }, [
+      "objectName",
+      "recordId",
+      "fields",
+    ]),
     outputSchema: mutationResult,
   }),
   defineProviderAction("salesforce", {
@@ -132,6 +150,7 @@ export const salesforceBaseActions: ActionDefinition[] = [
         externalIdField,
         externalId,
         fields,
+        ...writeControls,
         updateOnly: s.boolean("Fail if no matching record exists instead of inserting a record (API 61.0 or later)."),
       },
       ["objectName", "externalIdField", "externalId", "fields"],

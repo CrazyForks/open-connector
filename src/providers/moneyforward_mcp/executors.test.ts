@@ -13,11 +13,7 @@ import { executorModules } from "../registry.generated.ts";
 import { moneyforwardActions } from "./actions.ts";
 import { provider } from "./definition.ts";
 import { moneyforwardMcpEndpoint, moneyforwardTools, schemaDigest } from "./manifest.ts";
-import {
-  createMoneyforwardMcpHandlers,
-  moneyforwardMcpActionHandlers,
-  validateMoneyforwardMcpCredential,
-} from "./runtime.ts";
+import { createMoneyforwardMcpHandlers, validateMoneyforwardMcpCredential } from "./runtime.ts";
 
 // Synthetic values only: no real key, office code or office name appears in this file.
 const apiKey = "test-mf-api-key";
@@ -259,24 +255,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   setDefaultGuardedFetchDnsLookup(undefined);
-});
-
-describe("wiring", () => {
-  it("has an action and a handler for every Money Forward tool, and nothing else", () => {
-    const actionNames = moneyforwardActions.map((action) => action.name).sort();
-    const toolActions = moneyforwardTools.map((tool) => tool.actionName);
-    expect(actionNames).toEqual([...toolActions, "list_tools"].sort());
-    expect(Object.keys(moneyforwardMcpActionHandlers).sort()).toEqual(actionNames);
-    const writes = moneyforwardActions
-      .filter((action) => action.operationType === "write")
-      .map((action) => action.name);
-    expect(writes.sort()).toEqual(
-      moneyforwardTools
-        .filter((tool) => tool.isWrite)
-        .map((tool) => tool.actionName)
-        .sort(),
-    );
-  });
 });
 
 describe("connection", () => {

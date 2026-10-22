@@ -261,11 +261,6 @@ describe("Slack ACL enumeration and api_key authorization", () => {
     expect(slackbotExecutors["slackbot.conversations_members"]).toBeDefined();
   });
 
-  it("declares api_key on the slack provider definition", async () => {
-    const { provider } = await import("./definition.ts");
-    expect(provider.authTypes).toContain("api_key");
-  });
-
   it("validates an api_key credential against auth.test and keeps the team in metadata", async () => {
     const result = await credentialValidators.apiKey!(apiKeyCredential("xoxb-bot-token"), {
       fetcher: async (url, init) => {

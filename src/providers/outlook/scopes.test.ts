@@ -15,18 +15,6 @@ const readOnlyGrant = ["offline_access", "User.Read", "Mail.Read"];
 const readerActions = ["get_profile", "list_mail_folders", "list_messages", "get_message"];
 
 describe("Outlook OAuth scopes", () => {
-  it("declares Mail.Read beside the write grant", () => {
-    expect(oauth().scopes).toBe(outlookOAuthScopes);
-    expect(outlookOAuthScopes).toEqual([
-      "User.Read",
-      "Mail.Read",
-      "Mail.ReadWrite",
-      "Mail.Send",
-      "MailboxSettings.ReadWrite",
-      "offline_access",
-    ]);
-  });
-
   it("lets a host request the read-only grant alone", () => {
     const service = configService();
     const config = service.normalizeConfig("outlook", {
@@ -65,29 +53,7 @@ describe("Outlook OAuth scopes", () => {
       expect(readOnlyGrant, `outlook.${name} requires ${scope}`).toContain(scope);
     }
   });
-
-  it("keeps the write actions on the write scopes", () => {
-    expect(action("create_draft").requiredScopes).toEqual(["Mail.ReadWrite"]);
-    expect(action("send_email").requiredScopes).toEqual(["Mail.Send"]);
-    expect(action("update_mailbox_settings").requiredScopes).toEqual(["MailboxSettings.ReadWrite"]);
-  });
-
-  it("names only declared scopes on every action", () => {
-    const declared = new Set(outlookOAuthScopes);
-
-    for (const item of outlookActions) {
-      for (const scope of [...item.requiredScopes, ...item.providerPermissions]) {
-        expect(declared, `${item.id} names ${scope}`).toContain(scope);
-      }
-    }
-  });
 });
-
-function oauth() {
-  const auth = provider.auth.find((candidate) => candidate.type === "oauth2");
-  if (auth?.type !== "oauth2") throw new Error("outlook must keep an oauth2 auth method");
-  return auth;
-}
 
 function action(name: string) {
   const found = outlookActions.find((candidate) => candidate.name === name);

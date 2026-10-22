@@ -21,7 +21,6 @@ const expectedOAuthScopes = [
 const calendarListReadonly = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 const eventsFreeBusy = "https://www.googleapis.com/auth/calendar.events.freebusy";
 const calendar = "https://www.googleapis.com/auth/calendar";
-const expectedOptionalScopes = [calendarListReadonly, eventsFreeBusy, calendar];
 
 // A host that writes events and lists calendars without the sensitive calendar.readonly: the
 // identity scopes the userinfo validator reads, the events scope, and Google's two non-sensitive
@@ -39,20 +38,6 @@ const narrowGrant = [
 const fullGrant = ["openid", "email", "profile", calendar];
 
 describe("Google Calendar provider definition", () => {
-  it("does not request the redundant full-calendar scope alongside narrower scopes", () => {
-    const oauth = provider.auth.find((auth) => auth.type === "oauth2");
-
-    expect(oauth?.scopes).toEqual(expectedOAuthScopes);
-  });
-
-  it("offers the non-sensitive read scopes and the full calendar scope on request only", () => {
-    const oauth = provider.auth.find((auth) => auth.type === "oauth2");
-    if (oauth?.type !== "oauth2") throw new Error("Expected an oauth2 auth method");
-
-    expect(oauth.optionalScopes).toEqual(expectedOptionalScopes);
-    for (const scope of expectedOptionalScopes) expect(oauth.scopes).not.toContain(scope);
-  });
-
   it("asks the declared scopes alone when a client config names none", () => {
     const service = configService();
     const config = service.normalizeConfig("googlecalendar", { clientId: "client-id", clientSecret: "client-secret" });

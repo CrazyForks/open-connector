@@ -18,7 +18,7 @@ import {
   requireApiKeyCredential,
   requiredInputString,
 } from "../provider-runtime.ts";
-import { minimaxTextModels } from "./text-models.ts";
+import { minimaxTextModels, selectMinimaxModels } from "./text-models.ts";
 
 const service = "minimax";
 const minimaxApiBaseUrl = "https://api.minimax.io";
@@ -36,19 +36,7 @@ type MinimaxActionHandler = (input: Record<string, unknown>, context: MinimaxAct
 export const minimaxActionHandlers: ProviderActionHandlers<"minimax", MinimaxActionHandler> = {
   async list_models(input, context) {
     const payload = await minimaxGetJson("/v1/models", context);
-    if (input.include_legacy === true || !Array.isArray(payload.data)) return payload;
-    const models = payload.data.filter((item) => {
-      const id = optionalString(optionalRecord(item)?.id) ?? "";
-      return minimaxTextModels.includes(id) || !/^(?:MiniMax-(?:M\d|Text-)|M2-her$|abab\d)/i.test(id);
-    });
-    const preferred = minimaxTextModels.flatMap((id) => models.filter((item) => optionalRecord(item)?.id === id));
-    return {
-      ...payload,
-      data: [
-        ...preferred,
-        ...models.filter((item) => !minimaxTextModels.includes(optionalString(optionalRecord(item)?.id) ?? "")),
-      ],
-    };
+    return input.include_legacy === true ? payload : selectMinimaxModels(payload);
   },
   retrieve_model(input, context) {
     const modelId = requiredInputString(input.modelId, "modelId");
@@ -245,6 +233,10 @@ function normalizeMinimaxBody(input: Record<string, unknown>): Record<string, un
   return compactObject({
     ...input,
     model,
+    reasoning:
+      model === minimaxTextModels[0]
+        ? { ...optionalRecord(input.reasoning), effort: optionalRecord(input.reasoning)?.effort ?? "max" }
+        : input.reasoning,
     input: typeof input.input === "string" ? input.input.trim() : input.input,
     instructions: trimString(input.instructions),
     prompt_cache_key: trimString(input.prompt_cache_key),

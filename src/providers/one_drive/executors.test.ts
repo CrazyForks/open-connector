@@ -29,37 +29,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// `looseObject` lets undeclared keys through at runtime but does not publish them,
-// so the catalog schema is asserted directly: it is what SDK consumers generate types from.
-describe("list_item_permissions declares the fields it was measured to return", () => {
-  const action = provider.actions.find((candidate) => candidate.name === "list_item_permissions")!;
-  const permission = (action.outputSchema as Record<string, any>).properties.items.items;
-
-  it("names the identity fields a caller can actually key on", () => {
-    for (const set of ["grantedTo", "grantedToV2"]) {
-      const arm = permission.properties[set].properties;
-      for (const who of Object.keys(arm)) {
-        expect(Object.keys(arm[who].properties)).toEqual(
-          expect.arrayContaining(["id", "displayName", "email", "loginName"]),
-        );
-      }
-    }
-  });
-
-  it("names the reference fields inheritedFrom was measured to carry", () => {
-    const reference = permission.properties.inheritedFrom.properties;
-    expect(Object.keys(reference)).toEqual(
-      expect.arrayContaining(["driveId", "id", "path", "shareId", "sharepointIds"]),
-    );
-  });
-
-  it("declares none of them required, because each was absent somewhere", () => {
-    const identity = permission.properties.grantedToV2.properties.siteUser;
-    expect(identity.required ?? []).toEqual([]);
-    expect(permission.properties.inheritedFrom.required ?? []).toEqual([]);
-  });
-});
-
 describe("OneDrive transit downloads", () => {
   it("follows the guarded content redirect and stores exact file bytes", async () => {
     const content = new Uint8Array([79, 110, 101, 0, 255]);

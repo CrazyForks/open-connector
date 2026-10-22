@@ -90,7 +90,7 @@ function foreplayOutput(description: string) {
   });
 }
 
-export const searchForeplayAdsAction: ActionDefinition = defineProviderAction(service, {
+const searchForeplayAdsAction: ActionDefinition = defineProviderAction(service, {
   name: "search_foreplay_ads",
   operationType: "read",
   description: "Search the Foreplay ad index by text, platform, format, niche, and activity.",
@@ -106,7 +106,7 @@ export const searchForeplayAdsAction: ActionDefinition = defineProviderAction(se
   outputSchema: foreplayOutput("Foreplay ads matching the search and filters."),
 });
 
-export const getForeplayBrandAdsAction: ActionDefinition = defineProviderAction(service, {
+const getForeplayBrandAdsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_foreplay_brand_ads",
   operationType: "read",
   description: "List ads for one or more known Foreplay brand IDs.",
@@ -128,7 +128,7 @@ export const getForeplayBrandAdsAction: ActionDefinition = defineProviderAction(
   outputSchema: foreplayOutput("Foreplay ads associated with the requested brand IDs."),
 });
 
-export const findForeplayBrandsAction: ActionDefinition = defineProviderAction(service, {
+const findForeplayBrandsAction: ActionDefinition = defineProviderAction(service, {
   name: "find_foreplay_brands",
   operationType: "read",
   description: "Find candidate advertising brands associated with a domain.",
@@ -148,7 +148,7 @@ export const findForeplayBrandsAction: ActionDefinition = defineProviderAction(s
   outputSchema: foreplayOutput("Candidate Foreplay brands, including brand IDs and ad-library page IDs."),
 });
 
-export const getForeplayBrandAnalyticsAction: ActionDefinition = defineProviderAction(service, {
+const getForeplayBrandAnalyticsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_foreplay_brand_analytics",
   operationType: "read",
   description: "Get daily running-ad distribution and creative velocity for a brand page.",
@@ -222,7 +222,7 @@ const waveInfluOutput = s.looseObject("The WaveInflu response returned through A
   data: s.unknown("The creator matches or contact result returned by WaveInflu."),
 });
 
-export const findSimilarCreatorsAction: ActionDefinition = defineProviderAction(service, {
+const findSimilarCreatorsAction: ActionDefinition = defineProviderAction(service, {
   name: "find_similar_creators",
   operationType: "read",
   description: "Find creators similar to a seed account with optional audience filters.",
@@ -243,7 +243,7 @@ export const findSimilarCreatorsAction: ActionDefinition = defineProviderAction(
   outputSchema: waveInfluOutput,
 });
 
-export const searchCreatorsAction: ActionDefinition = defineProviderAction(service, {
+const searchCreatorsAction: ActionDefinition = defineProviderAction(service, {
   name: "search_creators",
   operationType: "read",
   description: "Find creators from a natural-language brief and optional audience filters.",
@@ -264,7 +264,7 @@ export const searchCreatorsAction: ActionDefinition = defineProviderAction(servi
   outputSchema: waveInfluOutput,
 });
 
-export const lookupCreatorEmailAction: ActionDefinition = defineProviderAction(service, {
+const lookupCreatorEmailAction: ActionDefinition = defineProviderAction(service, {
   name: "lookup_creator_email",
   operationType: "read",
   description: "Look up the public contact email for one creator profile; not-found results are billed.",

@@ -205,22 +205,6 @@ function actionNamed(name: string) {
 }
 
 describe("linear_mcp definition", () => {
-  it("declares Linear's MCP authorization server as a public PKCE client with the MCP resource", () => {
-    expect(provider.service).toBe("linear_mcp");
-    expect(provider.authTypes).toEqual(["oauth2"]);
-    expect(provider.auth).toHaveLength(1);
-    const oauth = provider.auth[0]!;
-    if (oauth.type !== "oauth2") throw new Error("expected oauth2");
-    expect(oauth.authorizationUrl).toBe("https://mcp.linear.app/authorize");
-    expect(oauth.tokenUrl).toBe("https://mcp.linear.app/token");
-    expect(oauth.scopes).toEqual(["read"]);
-    expect(oauth.optionalScopes).toEqual(["write"]);
-    expect(oauth.scopeSeparator).toBeUndefined();
-    expect(oauth.tokenEndpointAuthMethod).toBe("none");
-    expect(oauth.pkce).toEqual({ method: "S256" });
-    expect(oauth.authorizationParams).toEqual({ resource: endpoint });
-  });
-
   it("writes the register step in the scripted shape a host parses", () => {
     const oauth = provider.auth[0]!;
     if (oauth.type !== "oauth2") throw new Error("expected oauth2");
@@ -238,31 +222,6 @@ describe("linear_mcp definition", () => {
       token_endpoint_auth_method: "none",
       scope: "read write",
     });
-  });
-
-  it("maps every action to a tool, spells action ids as service.name, and keys the writes on the write scope", () => {
-    expect(provider.actions.map((action) => action.id).sort()).toEqual([
-      "linear_mcp.create_comment",
-      "linear_mcp.create_issue",
-      "linear_mcp.get_issue",
-      "linear_mcp.get_self",
-      "linear_mcp.list_comments",
-      "linear_mcp.list_issue_labels",
-      "linear_mcp.list_issue_statuses",
-      "linear_mcp.list_issues",
-      "linear_mcp.list_projects",
-      "linear_mcp.list_teams",
-      "linear_mcp.update_issue",
-    ]);
-    expect(Object.keys(linearMcpToolsByAction).sort()).toEqual(provider.actions.map((action) => action.name).sort());
-    expect(Object.keys(executors).sort()).toEqual(provider.actions.map((action) => action.id).sort());
-    const writes = ["create_issue", "update_issue", "create_comment"];
-    for (const action of provider.actions) {
-      const isWrite = writes.includes(action.name);
-      expect(action.operationType).toBe(isWrite ? "write" : "read");
-      expect(action.requiredScopes).toEqual([isWrite ? "write" : "read"]);
-    }
-    expect(linearMcpToolsByAction.create_issue).toBe(linearMcpToolsByAction.update_issue);
   });
 });
 

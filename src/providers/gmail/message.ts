@@ -6,7 +6,7 @@ export interface GmailMessageHeader {
   value: string;
 }
 
-export interface GmailMessagePart {
+interface GmailMessagePart {
   partId?: string;
   mimeType?: string;
   filename?: string;
@@ -273,7 +273,7 @@ interface GmailBodyContent {
   isHtml: boolean;
 }
 
-export function extractBodyContent(payload: GmailMessagePart | null): GmailBodyContent {
+function extractBodyContent(payload: GmailMessagePart | null): GmailBodyContent {
   return extractPartBody(payload, true);
 }
 

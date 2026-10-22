@@ -7,22 +7,20 @@ import { creatorActions } from "./creator-actions.ts";
 import { cryptoActions } from "./crypto-actions.ts";
 import { dataForSeoActions } from "./dataforseo-actions.ts";
 import { financialActions } from "./financial-actions.ts";
+import { aisaFirecrawlActions } from "./firecrawl-actions.ts";
 import { seoActions } from "./seo-actions.ts";
 import { similarwebActions } from "./similarweb-actions.ts";
 import { socialActions } from "./social-actions.ts";
-
+import { webActions } from "./web-actions.ts";
 const service = "aisa";
-
 const paginationInput = {
   limit: s.integer("The maximum number of records to return.", { minimum: 0, maximum: 1000 }),
   cursor: s.string("The pagination cursor returned by the previous response."),
 };
-
 const offsetPaginationInput = {
   limit: s.integer("The maximum number of records to return.", { minimum: 0 }),
   offset: s.integer("The number of records to skip.", { minimum: 0 }),
 };
-
 const kalshiMarketsAction = defineProviderAction(service, {
   name: "get_kalshi_markets",
   operationType: "read",
@@ -74,7 +72,6 @@ const kalshiMarketsAction = defineProviderAction(service, {
     ),
   }),
 });
-
 const kalshiTradesAction = defineProviderAction(service, {
   name: "get_kalshi_trades",
   operationType: "read",
@@ -99,13 +96,11 @@ const kalshiTradesAction = defineProviderAction(service, {
     ),
   }),
 });
-
 const polymarketCommonInput = {
   ...offsetPaginationInput,
   order: s.string("A comma-separated list of fields used to order the results."),
   ascending: s.boolean("Whether to sort the results in ascending order."),
 };
-
 const polymarketMarketsAction = defineProviderAction(service, {
   name: "get_polymarket_markets",
   operationType: "read",
@@ -164,7 +159,6 @@ const polymarketMarketsAction = defineProviderAction(service, {
     s.looseObject("A Polymarket market with its question, outcomes, prices, volume, liquidity, and dates."),
   ),
 });
-
 const polymarketEventsAction = defineProviderAction(service, {
   name: "get_polymarket_events",
   operationType: "read",
@@ -229,7 +223,6 @@ const polymarketEventsAction = defineProviderAction(service, {
     s.looseObject("A Polymarket event with its topic metadata, volume, liquidity, dates, and nested markets."),
   ),
 });
-
 const polymarketActivityAction = defineProviderAction(service, {
   name: "get_polymarket_activity",
   operationType: "read",
@@ -263,7 +256,6 @@ const polymarketActivityAction = defineProviderAction(service, {
     pagination: s.looseObject("Pagination metadata, including the next pagination key when available."),
   }),
 });
-
 const creditsBalanceAction = defineProviderAction(service, {
   name: "get_credits_balance",
   operationType: "read",
@@ -272,7 +264,6 @@ const creditsBalanceAction = defineProviderAction(service, {
   inputSchema: s.requiredObject("The input payload for getting the current AIsa credit balance.", {}),
   outputSchema: s.looseObject("The current AIsa balance snapshot in micro-USD."),
 });
-
 const usageAction = defineProviderAction(service, {
   name: "get_usage",
   operationType: "read",
@@ -292,8 +283,9 @@ const usageAction = defineProviderAction(service, {
   ),
   outputSchema: s.looseObject("AIsa usage totals and daily buckets for the requested time window."),
 });
-
 export const aisaActions: ActionDefinition[] = [
+  ...webActions,
+  ...aisaFirecrawlActions,
   creditsBalanceAction,
   usageAction,
   kalshiMarketsAction,

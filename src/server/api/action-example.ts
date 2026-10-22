@@ -38,6 +38,14 @@ export function buildExampleInput(schema: JsonSchema): Record<string, unknown> {
       }
     }
   }
+  // De Morgan's law exposes positive choices encoded as not(allOf(not(...))).
+  if (isSchemaObject(seedSchema.not) && Array.isArray(seedSchema.not.allOf)) {
+    const members = seedSchema.not.allOf;
+    if (members.length > 0 && members.every((member) => isSchemaObject(member) && isSchemaObject(member.not))) {
+      const choices = members.map((member) => (member as JsonSchema).not);
+      seedRequirementBranches({ ...seedSchema, not: undefined, anyOf: choices }, properties, input);
+    }
+  }
   applyConditionalRequirements(seedSchema, seedSchema, input);
   return input;
 }
@@ -334,7 +342,10 @@ function stringExample(schema: JsonSchema): string {
   const minLength = typeof schema.minLength === "number" && schema.minLength > 0 ? schema.minLength : 0;
   const maxLength = typeof schema.maxLength === "number" ? schema.maxLength : undefined;
   if (typeof schema.format === "string") {
-    return formatStringExample(schema.format, minLength, maxLength);
+    const formatted = formatStringExample(schema.format, minLength, maxLength);
+    if (new Validator(schema as Schema, "2020-12").validate(formatted).valid) {
+      return formatted;
+    }
   }
   if (typeof schema.pattern === "string") {
     const sample = samplePattern(schema.pattern, { minLength });

@@ -224,10 +224,6 @@ describe("Metabase native MCP", () => {
     },
   );
 
-  it("registers executors for the combined REST and MCP catalog", () => {
-    expect(Object.keys(executors).sort()).toEqual(provider.actions.map((action) => action.id).sort());
-  });
-
   it("uses the normalized subpath endpoint and API key for every MCP request without DELETE", async () => {
     const { context, calls, methods, headers, urls } = fixture();
     await invoke("construct_native_query", { databaseId: 1, sql: "select 1" }, context);

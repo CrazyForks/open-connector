@@ -47,3 +47,10 @@ describe("samplePattern", () => {
     expect(samplePattern("^a+$", { minLength: 512 })).toBe("a".repeat(512));
   });
 });
+
+it("tries explicit alternatives when a lookahead rejects the shortest branch", () => {
+  const pattern = "^(?=.*[1-9])(?:0|[1-9]\\d{0,11})(?:\\.\\d{1,2})?$";
+  const sample = samplePattern(pattern);
+  expect(sample).toBeDefined();
+  expect(new RegExp(pattern, "u").test(sample!)).toBe(true);
+});

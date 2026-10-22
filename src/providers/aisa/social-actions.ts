@@ -7,7 +7,7 @@ const service = "aisa";
 const socialOutput = s.looseObject("The public Twitter data returned by AIsa.");
 const cursor = s.string("The cursor returned by the previous page.");
 
-export const getTwitterUserAction: ActionDefinition = defineProviderAction(service, {
+const getTwitterUserAction: ActionDefinition = defineProviderAction(service, {
   name: "get_twitter_user",
   operationType: "read",
   description: "Get a public Twitter profile by username through AIsa.",
@@ -18,7 +18,7 @@ export const getTwitterUserAction: ActionDefinition = defineProviderAction(servi
   outputSchema: socialOutput,
 });
 
-export const getTwitterUsersAction: ActionDefinition = defineProviderAction(service, {
+const getTwitterUsersAction: ActionDefinition = defineProviderAction(service, {
   name: "get_twitter_users",
   operationType: "read",
   description: "Get public Twitter profiles for multiple user IDs.",
@@ -32,7 +32,7 @@ export const getTwitterUsersAction: ActionDefinition = defineProviderAction(serv
   outputSchema: socialOutput,
 });
 
-export const searchTwitterPostsAction: ActionDefinition = defineProviderAction(service, {
+const searchTwitterPostsAction: ActionDefinition = defineProviderAction(service, {
   name: "search_twitter_posts",
   operationType: "read",
   description: "Search public Twitter posts using X query syntax and cursor pagination.",
@@ -49,7 +49,7 @@ export const searchTwitterPostsAction: ActionDefinition = defineProviderAction(s
   outputSchema: socialOutput,
 });
 
-export const getTwitterPostsAction: ActionDefinition = defineProviderAction(service, {
+const getTwitterPostsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_twitter_posts",
   operationType: "read",
   description: "Get public Twitter posts by their IDs.",
@@ -63,7 +63,7 @@ export const getTwitterPostsAction: ActionDefinition = defineProviderAction(serv
   outputSchema: socialOutput,
 });
 
-export const getTwitterUserTimelineAction: ActionDefinition = defineProviderAction(service, {
+const getTwitterUserTimelineAction: ActionDefinition = defineProviderAction(service, {
   name: "get_twitter_user_timeline",
   operationType: "read",
   description: "Get a public Twitter user's post timeline.",
@@ -81,7 +81,7 @@ export const getTwitterUserTimelineAction: ActionDefinition = defineProviderActi
   outputSchema: socialOutput,
 });
 
-export const getTwitterUserRecentPostsAction: ActionDefinition = defineProviderAction(service, {
+const getTwitterUserRecentPostsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_twitter_user_recent_posts",
   operationType: "read",
   description: "Get a public Twitter user's most recent posts by ID or username.",
@@ -102,7 +102,7 @@ export const getTwitterUserRecentPostsAction: ActionDefinition = defineProviderA
   outputSchema: socialOutput,
 });
 
-export const getTwitterMentionsAction: ActionDefinition = defineProviderAction(service, {
+const getTwitterMentionsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_twitter_mentions",
   operationType: "read",
   description: "Get public posts mentioning a Twitter username in an optional time window.",
@@ -120,7 +120,7 @@ export const getTwitterMentionsAction: ActionDefinition = defineProviderAction(s
   outputSchema: socialOutput,
 });
 
-export const getTwitterPostRepliesAction: ActionDefinition = defineProviderAction(service, {
+const getTwitterPostRepliesAction: ActionDefinition = defineProviderAction(service, {
   name: "get_twitter_post_replies",
   operationType: "read",
   description: "List public replies to a Twitter post.",
@@ -133,7 +133,7 @@ export const getTwitterPostRepliesAction: ActionDefinition = defineProviderActio
   outputSchema: socialOutput,
 });
 
-export const getTwitterThreadAction: ActionDefinition = defineProviderAction(service, {
+const getTwitterThreadAction: ActionDefinition = defineProviderAction(service, {
   name: "get_twitter_thread",
   operationType: "read",
   description: "Get the public conversation context surrounding a Twitter post.",
@@ -146,7 +146,7 @@ export const getTwitterThreadAction: ActionDefinition = defineProviderAction(ser
   outputSchema: socialOutput,
 });
 
-export const getTwitterTrendsAction: ActionDefinition = defineProviderAction(service, {
+const getTwitterTrendsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_twitter_trends",
   operationType: "read",
   description: "Get public Twitter trends for a Where On Earth location.",

@@ -687,7 +687,8 @@
       "src/providers/wordpress/executors.ts": 1,
       "src/providers/youzan/executors.ts": 1,
       "src/providers/zendesk/executors.ts": 1,
-      "src/providers/zorus/executors.ts": 1
+      "src/providers/zorus/executors.ts": 1,
+      "src/providers/defillama/executors.ts": 1
     },
     "local-crypto-encoding-helper": {
       "src/providers/jimeng_ai/executors.ts": 2,

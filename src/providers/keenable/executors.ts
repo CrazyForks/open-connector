@@ -8,16 +8,13 @@ import {
   keenableAppTitle,
   validateKeenableCredential,
 } from "./runtime.ts";
-
 const service = "keenable";
-
 export const executors: ProviderExecutors = defineProviderExecutors({
   service,
   handlers: keenableActionHandlers,
   createContext: createKeenableContext,
   skipDnsValidation: true,
 });
-
 export const proxy: ProviderProxyExecutor = defineProviderProxy({
   service,
   baseUrl: keenableApiBaseUrl,
@@ -27,5 +24,4 @@ export const proxy: ProviderProxyExecutor = defineProviderProxy({
     if (!headers.has("x-keenable-title")) headers.set("x-keenable-title", keenableAppTitle);
   },
 });
-
 export const credentialValidators: CredentialValidators = { apiKey: validateKeenableCredential };

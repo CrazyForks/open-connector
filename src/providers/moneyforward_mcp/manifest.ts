@@ -186,7 +186,7 @@ export function schemaDigest(schema: unknown): string {
 }
 
 /** RFC 8785 JSON Canonicalization for the JSON values a tool schema can hold. */
-export function canonicalJson(value: unknown): string {
+function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value !== null && typeof value === "object") {
     const record = value as Record<string, unknown>;

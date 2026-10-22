@@ -202,7 +202,7 @@ export function normalizeWechatApiError(result: WechatApiResult): ProviderReques
     return new ProviderRequestError(429, message, result.record);
   }
   if (errcode === 48001 || errcode === 10023007 || errcode === 10023114 || errcode === 10023115) {
-    return new ProviderRequestError(403, message, result.record);
+    return new ProviderRequestError(403, message, result.record, "provider_error");
   }
   if (errcode === 10023003 || errcode === 10023004 || errcode === 10023006) {
     return new ProviderRequestError(409, message, result.record);

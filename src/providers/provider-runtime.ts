@@ -584,7 +584,7 @@ export async function readProviderProxyResponse(
     createError: (message) => new ProviderRequestError(413, message),
   });
   const contentType = response.headers.get("content-type") ?? "";
-  const normalizedContentType = contentType.toLowerCase();
+  const normalizedContentType = contentType.split(";", 1)[0]!.trim().toLowerCase();
   if (bytes.byteLength === 0) {
     return {
       status: response.status,
@@ -592,7 +592,18 @@ export async function readProviderProxyResponse(
       data: null,
     };
   }
-  if (normalizedContentType.includes("json")) {
+  if (!normalizedContentType) {
+    try {
+      return {
+        status: response.status,
+        headers,
+        data: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+      };
+    } catch {
+      // Preserve invalid UTF-8 bytes through the base64 fallback.
+    }
+  }
+  if (normalizedContentType === "application/json" || normalizedContentType.endsWith("+json")) {
     return {
       status: response.status,
       headers,
@@ -630,6 +641,7 @@ function isTextProxyContentType(contentType: string): boolean {
   const normalized = contentType.split(";", 1)[0]!.trim().toLowerCase();
   return (
     normalized.startsWith("text/") ||
+    normalized === "application/x-ndjson" ||
     normalized === "application/xml" ||
     normalized === "application/xml-external-parsed-entity" ||
     normalized === "application/xml-dtd" ||
@@ -1242,6 +1254,38 @@ export function parseProviderJsonBodyText(text: string, options: ReadProviderJso
     }
     throw new ProviderRequestError(options.invalidJsonStatus ?? 502, options.invalidJsonMessage, error);
   }
+}
+
+interface UploadSourceInput {
+  url: string;
+  fetcher: typeof fetch;
+  fieldName: string;
+  maximumBytes?: number;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+/** Download an upload source through public-only egress with a bounded body. */
+export async function downloadUploadSource(
+  input: UploadSourceInput,
+): Promise<{ bytes: Uint8Array; contentType?: string }> {
+  return runProviderRequest(
+    { label: input.fieldName, timeoutMs: input.timeoutMs ?? 15_000, signal: input.signal },
+    async (signal) => {
+      const response = await createProviderFetch({ fetch: input.fetcher })(input.url, { signal });
+      if (!response.ok) {
+        void response.body?.cancel().catch(() => undefined);
+        throw providerInputError(`${input.fieldName} download failed with HTTP ${response.status}`);
+      }
+      const bytes = await readBoundedResponseBytes(response, {
+        maxBytes: input.maximumBytes ?? 20 * 1024 * 1024,
+        fieldName: input.fieldName,
+        createError: providerInputError,
+        signal,
+      });
+      return { bytes, contentType: response.headers.get("content-type") ?? undefined };
+    },
+  );
 }
 
 /**

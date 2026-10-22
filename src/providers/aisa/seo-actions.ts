@@ -19,7 +19,7 @@ const backlinkTargetType = s.stringEnum("How Semrush should interpret the backli
   "url",
 ]);
 
-export const semrushKeywordOverviewAction: ActionDefinition = defineProviderAction(service, {
+const semrushKeywordOverviewAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_keyword_overview",
   operationType: "read",
   description: "Get volume, CPC, competition, and result counts for a keyword.",
@@ -32,7 +32,7 @@ export const semrushKeywordOverviewAction: ActionDefinition = defineProviderActi
   outputSchema: semrushOutput,
 });
 
-export const semrushKeywordDifficultyAction: ActionDefinition = defineProviderAction(service, {
+const semrushKeywordDifficultyAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_keyword_difficulty",
   operationType: "read",
   description: "Get keyword-difficulty scores for up to 20 keywords.",
@@ -48,7 +48,7 @@ export const semrushKeywordDifficultyAction: ActionDefinition = defineProviderAc
   outputSchema: semrushOutput,
 });
 
-export const semrushBroadMatchKeywordsAction: ActionDefinition = defineProviderAction(service, {
+const semrushBroadMatchKeywordsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_broad_match_keywords",
   operationType: "read",
   description: "Find broad-match keyword ideas for a seed phrase.",
@@ -60,7 +60,7 @@ export const semrushBroadMatchKeywordsAction: ActionDefinition = defineProviderA
   outputSchema: semrushOutput,
 });
 
-export const semrushQuestionKeywordsAction: ActionDefinition = defineProviderAction(service, {
+const semrushQuestionKeywordsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_question_keywords",
   operationType: "read",
   description: "Find question-form keyword ideas for a seed phrase.",
@@ -72,7 +72,7 @@ export const semrushQuestionKeywordsAction: ActionDefinition = defineProviderAct
   outputSchema: semrushOutput,
 });
 
-export const semrushDomainRankHistoryAction: ActionDefinition = defineProviderAction(service, {
+const semrushDomainRankHistoryAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_domain_rank_history",
   operationType: "read",
   description: "Get historical Semrush rank and search-visibility metrics for a domain.",
@@ -84,7 +84,7 @@ export const semrushDomainRankHistoryAction: ActionDefinition = defineProviderAc
   outputSchema: semrushOutput,
 });
 
-export const semrushDomainComparisonAction: ActionDefinition = defineProviderAction(service, {
+const semrushDomainComparisonAction: ActionDefinition = defineProviderAction(service, {
   name: "compare_semrush_domains",
   operationType: "read",
   description: "Compare organic or paid keyword portfolios across domains.",
@@ -96,7 +96,7 @@ export const semrushDomainComparisonAction: ActionDefinition = defineProviderAct
   outputSchema: semrushOutput,
 });
 
-export const semrushBacklinksOverviewAction: ActionDefinition = defineProviderAction(service, {
+const semrushBacklinksOverviewAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_backlinks_overview",
   operationType: "read",
   description: "Get authority, backlink, referring-domain, URL, and IP totals for a root domain.",
@@ -107,7 +107,7 @@ export const semrushBacklinksOverviewAction: ActionDefinition = defineProviderAc
   outputSchema: semrushOutput,
 });
 
-export const semrushBacklinksAction: ActionDefinition = defineProviderAction(service, {
+const semrushBacklinksAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_backlinks",
   operationType: "read",
   description: "List backlinks pointing to a domain or URL.",
@@ -119,7 +119,7 @@ export const semrushBacklinksAction: ActionDefinition = defineProviderAction(ser
   outputSchema: semrushOutput,
 });
 
-export const semrushReferringDomainsAction: ActionDefinition = defineProviderAction(service, {
+const semrushReferringDomainsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_referring_domains",
   operationType: "read",
   description: "List domains linking to a target domain or URL.",
@@ -131,7 +131,7 @@ export const semrushReferringDomainsAction: ActionDefinition = defineProviderAct
   outputSchema: semrushOutput,
 });
 
-export const semrushBacklinkCompetitorsAction: ActionDefinition = defineProviderAction(service, {
+const semrushBacklinkCompetitorsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_backlink_competitors",
   operationType: "read",
   description: "Find domains competing with a target for backlinks.",
@@ -142,7 +142,7 @@ export const semrushBacklinkCompetitorsAction: ActionDefinition = defineProvider
   }),
   outputSchema: semrushOutput,
 });
-export const semrushDomainOverviewAction: ActionDefinition = defineProviderAction(service, {
+const semrushDomainOverviewAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_domain_overview",
   operationType: "read",
   description: "Get current Semrush rank, organic keyword, traffic, cost, and paid keyword totals for a domain.",
@@ -157,7 +157,7 @@ export const semrushDomainOverviewAction: ActionDefinition = defineProviderActio
   ),
   outputSchema: semrushOutput,
 });
-export const semrushOrganicResultsAction: ActionDefinition = defineProviderAction(service, {
+const semrushOrganicResultsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_organic_results",
   operationType: "read",
   description: "List domains, URLs, and raw SERP feature codes for a keyword in Google organic search.",
@@ -172,7 +172,7 @@ export const semrushOrganicResultsAction: ActionDefinition = defineProviderActio
   ),
   outputSchema: semrushOutput,
 });
-export const semrushDomainOrganicKeywordsAction: ActionDefinition = defineProviderAction(service, {
+const semrushDomainOrganicKeywordsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_domain_organic_keywords",
   operationType: "read",
   description: "List a domain's Google organic keywords with positions, search volume, CPC, and ranking URLs.",
@@ -183,7 +183,7 @@ export const semrushDomainOrganicKeywordsAction: ActionDefinition = defineProvid
   }),
   outputSchema: semrushOutput,
 });
-export const semrushOrganicCompetitorsAction: ActionDefinition = defineProviderAction(service, {
+const semrushOrganicCompetitorsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_organic_competitors",
   operationType: "read",
   description: "Find Google organic search competitors with relevance and shared keyword counts.",
@@ -194,7 +194,7 @@ export const semrushOrganicCompetitorsAction: ActionDefinition = defineProviderA
   }),
   outputSchema: semrushOutput,
 });
-export const semrushUrlOrganicKeywordsAction: ActionDefinition = defineProviderAction(service, {
+const semrushUrlOrganicKeywordsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_url_organic_keywords",
   operationType: "read",
   description: "List a landing page's Google organic keywords with positions, search volume, and CPC.",
@@ -205,7 +205,7 @@ export const semrushUrlOrganicKeywordsAction: ActionDefinition = defineProviderA
   }),
   outputSchema: semrushOutput,
 });
-export const semrushBacklinkAnchorsAction: ActionDefinition = defineProviderAction(service, {
+const semrushBacklinkAnchorsAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_backlink_anchors",
   operationType: "read",
   description: "Get backlink anchor text and backlink counts for a domain or URL.",
@@ -216,7 +216,7 @@ export const semrushBacklinkAnchorsAction: ActionDefinition = defineProviderActi
   }),
   outputSchema: semrushOutput,
 });
-export const semrushIndexedPagesAction: ActionDefinition = defineProviderAction(service, {
+const semrushIndexedPagesAction: ActionDefinition = defineProviderAction(service, {
   name: "get_semrush_indexed_pages",
   operationType: "read",
   description:

@@ -66,9 +66,43 @@ export function samplePattern(pattern: string, options: { minLength?: number } =
     if (sample.length > maximumSampleLength) {
       return undefined;
     }
-    return matchesPattern(pattern, sample) ? sample : undefined;
+    if (matchesPattern(pattern, sample)) {
+      return sample;
+    }
+    // Try explicit alternatives when an assertion rejects the shortest branch.
+    // Bound the work; this is a sampler, not a general regex constraint solver.
+    for (const candidate of alternativeRoots(root)) {
+      const value = generateSample(candidate, minLength, growth, { remaining: maximumSampleLength });
+      if (value.length >= minLength && matchesPattern(pattern, value)) {
+        return value;
+      }
+    }
+    return undefined;
   } catch {
     return undefined;
+  }
+}
+
+function alternativeRoots(root: PatternNode): PatternNode[] {
+  switch (root.kind) {
+    case "literal":
+      return [];
+    case "alternation":
+      return root.branches.slice(0, 32);
+    case "repeat":
+      return alternativeRoots(root.node).map((node) => ({ ...root, node }));
+    case "sequence": {
+      const variants: PatternNode[] = [];
+      for (let index = 0; index < root.nodes.length && variants.length < 32; index += 1) {
+        for (const node of alternativeRoots(root.nodes[index]!)) {
+          const nodes = root.nodes.slice();
+          nodes[index] = node;
+          variants.push({ kind: "sequence", nodes });
+          if (variants.length === 32) break;
+        }
+      }
+      return variants;
+    }
   }
 }
 

@@ -2,7 +2,8 @@ import type { CredentialValidators, ProviderExecutors, ProviderProxyExecutor } f
 import type { ProviderActionHandlers } from "../provider-runtime.ts";
 import type { ApiKeyProviderContext } from "../provider-runtime.ts";
 
-import { compactObject, optionalBoolean, optionalRecord, optionalString } from "../../core/cast.ts";
+import { compactObject, optionalBoolean, optionalString } from "../../core/cast.ts";
+import { selectMinimaxModels } from "../minimax/text-models.ts";
 import {
   defineApiKeyProviderExecutors,
   defineProviderProxy,
@@ -105,7 +106,7 @@ export const openrouterActionHandlers: ProviderActionHandlers<"openrouter", Open
       },
       context,
     );
-    return input.includeLegacyMinimax === true ? payload : currentMinimaxModels(payload);
+    return input.includeLegacyMinimax === true ? payload : selectMinimaxModels(payload, true);
   },
   list_embedding_models(input, context) {
     return openrouterRequest(context.apiKey, { path: "/embeddings/models", headerSource: input }, context);
@@ -124,7 +125,7 @@ export const openrouterActionHandlers: ProviderActionHandlers<"openrouter", Open
   },
   async list_user_models(input, context) {
     const payload = await openrouterRequest(context.apiKey, { path: "/models/user", headerSource: input }, context);
-    return input.includeLegacyMinimax === true ? payload : currentMinimaxModels(payload);
+    return input.includeLegacyMinimax === true ? payload : selectMinimaxModels(payload, true);
   },
   list_zdr_endpoints(input, context) {
     return openrouterRequest(context.apiKey, { path: "/endpoints/zdr", headerSource: input }, context);
@@ -173,26 +174,6 @@ export const credentialValidators: CredentialValidators = {
     };
   },
 };
-
-function currentMinimaxModels(payload: unknown): unknown {
-  const record = optionalRecord(payload);
-  if (!Array.isArray(record?.data)) return payload;
-  const models = record.data;
-  const current = ["minimax/minimax-m3.1-flash:free", "minimax/minimax-m3"];
-  const isMinimaxText = (item: unknown): boolean => {
-    const id = optionalString(optionalRecord(item)?.id) ?? "";
-    return /^minimax\/(?:minimax-(?:m\d|text-|01$)|m2-her$|abab\d)/i.test(id);
-  };
-  const preferred = current.flatMap((id) => models.filter((item) => optionalRecord(item)?.id === id));
-  let inserted = false;
-  const data = models.flatMap((item) => {
-    if (!isMinimaxText(item)) return [item];
-    if (inserted) return [];
-    inserted = true;
-    return preferred;
-  });
-  return { ...record, data };
-}
 
 async function openrouterRequest(
   apiKey: string,

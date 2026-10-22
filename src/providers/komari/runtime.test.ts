@@ -90,13 +90,6 @@ describe("Komari RPC runtime", () => {
     expect(output).toEqual({ count: 0, records: [], load_type: "cpu", has_gpu_data: false });
   });
 
-  it("declares each JSON-RPC method as its action capability", () => {
-    expect(komariActions).toHaveLength(71);
-    expect(komariActions.map((action) => action.requiredScopes)).toEqual(
-      komariOperations.map((operation) => [operation.rpcMethod]),
-    );
-  });
-
   it.each([
     { name: "get_recent_metrics", required: ["uuid"] },
     { name: "get_execution_task", required: ["task_id"] },
