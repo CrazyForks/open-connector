@@ -58,6 +58,24 @@ describe("toProviderExecutionError", () => {
     });
   });
 
+  it("refines a generic provider error at an upstream rate limit without overriding a specific code", () => {
+    expect(
+      toProviderExecutionError(new ProviderRequestError(429, "Slow down", undefined, "provider_error"), "failed"),
+    ).toMatchObject({
+      error: { code: "rate_limited", message: "Slow down", details: { status: 429 } },
+    });
+    expect(
+      toProviderExecutionError(
+        new ProviderRequestError(429, "Credits exhausted", undefined, "insufficient_credit"),
+        "failed",
+      ).error?.code,
+    ).toBe("insufficient_credit");
+    expect(
+      toProviderExecutionError(new ProviderRequestError(401, "Keyless request", undefined, "provider_error"), "failed")
+        .error?.code,
+    ).toBe("provider_error");
+  });
+
   it("maps an upstream redirect status to a provider error rather than invalid input", () => {
     expect(toProviderExecutionError(new ProviderRequestError(302, "redirected"), "failed").error?.code).toBe(
       "provider_error",
