@@ -2,7 +2,13 @@ import type { ActionDefinition, JsonSchema } from "../../core/types.ts";
 
 import { s } from "../../core/json-schema.ts";
 import { defineProviderAction } from "../../core/provider-definition.ts";
-import { notionInsertCommentScopes, notionReadCommentScopes, notionReadScopes, notionWriteScopes } from "./scopes.ts";
+import {
+  notionInsertCommentScopes,
+  notionReadCommentScopes,
+  notionReadScopes,
+  notionUpdateContentCapability,
+  notionWriteScopes,
+} from "./scopes.ts";
 
 const service = "notion";
 
@@ -108,6 +114,57 @@ const comment = s.looseObject(
     attachments: s.array(notionObject, { description: "Files attached to the comment." }),
   },
   { description: "A Notion comment object." },
+);
+
+const view = s.object(
+  {
+    object: s.literal("view", { description: "The Notion object type." }),
+    id: s.string({ description: "The saved view ID." }),
+    parent: notionParent,
+    data_source_id: s.nullable(s.string({ description: "The data source shown by the view." })),
+    name: s.string({ description: "The saved view name." }),
+    type: s.string({ description: "The layout type, such as table, board, calendar, or dashboard." }),
+    filter: s.nullable(notionObject),
+    sorts: s.nullable(s.array(notionObject)),
+    quick_filters: s.nullable(notionObject),
+    configuration: s.nullable(notionObject),
+    created_time: s.dateTime("The time when the view was created."),
+    last_edited_time: s.dateTime("The time when the view was last edited."),
+    url: s.url("The Notion URL for the view."),
+  },
+  {
+    required: ["object", "id"],
+    additionalProperties: true,
+    description: "A saved Notion view. List results contain references; retrieve a view for its full settings.",
+  },
+);
+
+const viewConfiguration = s.object(
+  {
+    type: s.stringEnum(["table", "board", "list", "calendar", "timeline", "gallery", "form", "chart", "map"], {
+      description: "Must match the existing view type. Dashboard layout is read-only.",
+    }),
+    properties: s.nullable(
+      s.array(
+        s.object(
+          {
+            property_id: s.string({ minLength: 1, description: "The data source property ID." }),
+            visible: s.boolean({ description: "Whether the property is displayed." }),
+            width: s.integer({ minimum: 1, description: "The column width for table views." }),
+            wrap: s.boolean({ description: "Whether text wraps in the column." }),
+          },
+          { required: ["property_id"], additionalProperties: true },
+        ),
+        { description: "Displayed properties in order, with visibility and optional table column settings." },
+      ),
+    ),
+  },
+  {
+    required: ["type"],
+    additionalProperties: true,
+    description:
+      "Notion's view-specific presentation settings, such as properties, group_by, and wrap_cells. Include only settings to change; nullable nested fields accept null to clear them. The type must match the existing layout.",
+  },
 );
 
 const listOutput = (items: JsonSchema, description: string): JsonSchema =>
@@ -720,6 +777,66 @@ export const notionActions: ActionDefinition[] = [
     requiredScopes: notionReadScopes,
     inputSchema: paginationInput("dataSourceId", "The data source ID whose templates should be listed."),
     outputSchema: listOutput(notionObject, "Data source templates returned by Notion."),
+  }),
+  action({
+    name: "list_views",
+    operationType: "read",
+    description:
+      "List saved Notion view references with pagination. Supply databaseId for views in one database, or dataSourceId to include accessible linked views across the workspace. Retrieve each view to inspect its filters, sorts, and layout settings.",
+    requiredScopes: notionReadScopes,
+    inputSchema: s.requireAnyProperty(
+      s.object({
+        databaseId: s.string({ minLength: 1, description: "The database whose views should be listed." }),
+        dataSourceId: s.string({ minLength: 1, description: "The data source whose views should be listed." }),
+        pageSize: s.integer({ minimum: 1, maximum: 100, description: "The number of results per page." }),
+        startCursor: s.string({ description: "The next_cursor returned by the previous page." }),
+      }),
+      ["databaseId", "dataSourceId"],
+    ),
+    outputSchema: listOutput(view, "Saved view references returned by Notion."),
+  }),
+  action({
+    name: "retrieve_view",
+    operationType: "read",
+    description: "Retrieve a saved Notion view's name, layout configuration, filters, sorts, and displayed properties.",
+    requiredScopes: notionReadScopes,
+    inputSchema: idInput("viewId", "The saved view ID to retrieve."),
+    outputSchema: view,
+  }),
+  action({
+    name: "update_view",
+    operationType: "destructive",
+    description:
+      "Update a saved Notion view's name, filters, sorts, quick filters, or presentation settings. Omitted fields stay unchanged. Pass null to clear filters or sorts. Configuration type must match the existing view; this action does not change the layout type.",
+    requiredScopes: [notionUpdateContentCapability],
+    inputSchema: s.object(
+      {
+        viewId: s.string({ minLength: 1, description: "The saved view ID to update." }),
+        name: s.string({ description: "The new saved view name." }),
+        filter: s.nullable(s.record(notionValue, { description: "The saved filter. Pass null to clear it." })),
+        sorts: s.nullable(
+          s.array(
+            s.object(
+              {
+                property: s.string({ minLength: 1, description: "The property name or ID to sort by." }),
+                direction: s.stringEnum(["ascending", "descending"], { description: "The sort direction." }),
+              },
+              { required: ["property"] },
+            ),
+            { maxItems: 100, description: "Property-based sorts. Pass null to clear sorting." },
+          ),
+        ),
+        quick_filters: s.nullable(
+          s.record(s.nullable(notionObject), {
+            description:
+              "Filter-bar conditions keyed by property name or ID. Null removes a key or clears all quick filters.",
+          }),
+        ),
+        configuration: viewConfiguration,
+      },
+      { required: ["viewId"] },
+    ),
+    outputSchema: view,
   }),
   action({
     name: "list_comments",
