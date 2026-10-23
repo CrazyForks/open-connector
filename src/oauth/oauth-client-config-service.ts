@@ -27,7 +27,7 @@ export type OAuthClientConfig = {
 
 export interface OAuthClientConfigInput {
   clientId: string;
-  clientSecret: string;
+  clientSecret?: string;
   /** Non-empty provider-declared scope subset to request. Omit to use every provider default. */
   requestedScopes?: string[];
   /** Absolute redirect URI override, any scheme. Omit to use the runtime callback. */
@@ -121,7 +121,21 @@ export class OAuthClientConfigService {
   }
 
   async upsertConfig(input: OAuthClientConfigInput & { service: string }): Promise<OAuthClientConfigSummary> {
-    const config = this.normalizeConfig(input.service, input);
+    const previous = await this.getConfig(input.service);
+    const sameClient = previous?.clientId === input.clientId.trim();
+    const secretExtra: Record<string, unknown> = sameClient ? { ...previous?.secretExtra } : {};
+    for (const field of filterClientConfigFields(
+      this.getOAuthDefinition(input.service).clientConfigFields,
+      "secretExtra",
+    )) {
+      if (input.extra && field.key in input.extra) secretExtra[field.key] = input.extra[field.key];
+    }
+    Object.assign(secretExtra, input.secretExtra);
+    const config = this.normalizeConfig(input.service, {
+      ...input,
+      clientSecret: input.clientSecret ?? (sameClient ? previous?.clientSecret : undefined),
+      secretExtra,
+    });
     await this.store.set(config);
     return this.toSummary(input.service, this.getOAuthDefinition(input.service), config);
   }
@@ -129,7 +143,7 @@ export class OAuthClientConfigService {
   normalizeConfig(service: string, input: OAuthClientConfigInput): OAuthClientConfig {
     const auth = this.getOAuthDefinition(service);
     const clientId = input.clientId.trim();
-    const clientSecret = input.clientSecret.trim();
+    const clientSecret = (input.clientSecret ?? "").trim();
     if (!clientId) {
       throw new OAuthClientConfigError("invalid_input", "clientId is required.");
     }

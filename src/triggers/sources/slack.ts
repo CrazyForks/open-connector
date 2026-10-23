@@ -3,10 +3,9 @@ import type { EventSourceDefinition } from "./definition.ts";
 
 import { isJsonObject } from "../common/json.ts";
 import { SourceIdentityError } from "./definition.ts";
-import { verifySourceHmac } from "./signature.ts";
+import { verifySlackSignature } from "./slack-signature.ts";
 
 const events = new Set(["app_mention", "message.im"]);
-const encoder = new TextEncoder();
 
 export const slackApplication: EventSourceDefinition<
   CreateEventSource,
@@ -65,18 +64,14 @@ export const slackApplication: EventSourceDefinition<
   async receive(source, bytes, headers, now) {
     const timestamp = headers.get("x-slack-request-timestamp") ?? "";
     const signature = headers.get("x-slack-signature") ?? "";
-    if (
-      !/^\d{10}$/.test(timestamp) ||
-      Math.abs(now - Number(timestamp) * 1000) > 300_000 ||
-      !/^v0=[0-9a-f]{64}$/.test(signature)
-    )
-      throw new TypeError("Invalid Slack signature or timestamp.");
-    const prefix = encoder.encode(`v0:${timestamp}:`);
-    const body = new Uint8Array(prefix.length + bytes.length);
-    body.set(prefix);
-    body.set(bytes, prefix.length);
-    if (!(await verifySourceHmac(body, signature.slice(3), String(source.secrets.signingSecret))))
-      throw new TypeError("Invalid Slack signature.");
+    const failure = await verifySlackSignature({
+      timestamp,
+      signature,
+      rawBody: bytes,
+      signingSecret: String(source.secrets.signingSecret),
+      now,
+    });
+    if (failure) throw new TypeError("Invalid Slack signature or timestamp.");
     const payload: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (!isJsonObject(payload)) throw new TypeError("Invalid Slack envelope.");
     if (payload.type === "url_verification") {

@@ -246,7 +246,7 @@ export function createConsoleOAuthRoutes({
       oauthClientConfigs.upsertConfig({
         service,
         clientId: optionalString(body.clientId) ?? "",
-        clientSecret: optionalString(body.clientSecret) ?? "",
+        clientSecret: readOptionalRawString(body, "clientSecret"),
         requestedScopes: readOptionalStringArray(body, "requestedScopes"),
         redirectUri: readOptionalRawString(body, "redirectUri"),
         extra: optionalRecord(body.extra),

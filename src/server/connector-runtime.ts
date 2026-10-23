@@ -78,6 +78,8 @@ export interface ConnectorRuntimeOptions {
   adminToken?: string;
   /** Static bearer token for the /v1 and /mcp execution API. JWT verification and console-issued tokens are the alternatives. */
   runtimeToken?: string;
+  /** Dedicated bearer token for inbound provider event verification. Kept separate from the admin token. */
+  eventVerifyToken?: string;
   /** Verify /v1 bearer tokens as JWTs against a JWKS endpoint. */
   jwt?: RuntimeJwtConfig;
   postgres?: ConnectorPostgresOptions;
@@ -227,6 +229,7 @@ async function openRuntime(options: ConnectorRuntimeOptions): Promise<ConnectorR
       secretCodec,
       adminToken: options.adminToken,
       runtimeToken: options.runtimeToken,
+      eventVerifyToken: options.eventVerifyToken,
       verifyRuntimeJwt,
       actionPolicy: new ActionPolicyService(options.actionPolicy),
       allowedCustomOAuth: options.allowedCustomOAuth,

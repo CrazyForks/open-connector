@@ -155,6 +155,7 @@ export interface SaasProviderConfig {
 }
 
 export interface OAuthConfig {
+  missingFields?: string[];
   oauthSource?: OAuthSource;
   service: string;
   configured: boolean;

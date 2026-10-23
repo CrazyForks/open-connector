@@ -20,6 +20,7 @@ through runtime options to admit, delay or deny each upstream HTTP attempt.
 | `OOMOL_CONNECT_NEW_ENCRYPTION_KEY`          | unset                     | New key used by `runtime:data rotate-key`.                                                                                                                                  |
 | `OOMOL_CONNECT_ADMIN_TOKEN`                 | unset                     | Requires bearer-token auth for local admin API, docs, and web console.                                                                                                      |
 | `OOMOL_CONNECT_RUNTIME_TOKEN`               | unset                     | Optional bootstrap runtime bearer token for `/v1` and MCP callers.                                                                                                          |
+| `OOMOL_CONNECT_EVENT_VERIFY_TOKEN`          | unset                     | Dedicated bearer token for `POST /v1/providers/slackbot/events/verify`. When unset the route returns 404. Kept separate from the admin and runtime tokens.                  |
 | `OOMOL_CONNECT_ALLOWED_CUSTOM_OAUTH`        | unset                     | Enables connection-scoped OAuth apps for `*` or a comma-separated service list.                                                                                             |
 | `OOMOL_CONNECT_JWKS_URI`                    | unset                     | Node-only JWKS endpoint for validating runtime JWT access tokens.                                                                                                           |
 | `OOMOL_CONNECT_JWT_ISSUER`                  | unset                     | Expected `iss` claim for runtime JWT access tokens.                                                                                                                         |
@@ -303,3 +304,51 @@ npx wrangler secret put OOMOL_CONNECT_ENCRYPTION_KEY --config wrangler.local.jso
 ```
 
 Persistent runtime tokens need explicit `allowedTriggers` grants for Provider Triggers; old and new tokens default to no Trigger access. Trigger grants do not require `allowedProxies`. Stateful subscriptions require a persistent runtime token; environment tokens and verified JWTs support only permitted `options` and `read`. See [Provider Triggers](runtime-api.md#provider-triggers) for lifecycle, cleanup, account recovery and token rotation. Workers must have scheduled maintenance enabled and catalog assets available when Trigger cleanup is pending.
+
+## Slack event verification
+
+Configure the default Slack Bot OAuth application in the console with its Client ID and Client Secret. Its optional **Slack App ID** and **Slack Signing Secret** fields enable event verification; they are not required for OAuth authorization or ordinary actions. The Signing Secret belongs to the Slack application, not to each workspace installation.
+
+Set `OOMOL_CONNECT_EVENT_VERIFY_TOKEN` to a dedicated secret and restart the runtime. An ingress service can then forward the exact Slack request body and signature headers:
+
+```http
+POST /v1/providers/slackbot/events/verify
+Authorization: Bearer <event-verify-token>
+X-Slack-Request-Timestamp: <original-timestamp>
+X-Slack-Signature: <original-signature>
+Content-Type: application/json
+
+<original Slack request body, without re-serialization>
+```
+
+This endpoint uses only the deployment-default `slackbot` OAuth application configuration. Connection-specific OAuth app settings are not used, even if they contain a Signing Secret. No Connection or Open Flow deployment is required. Admin and runtime tokens do not grant access to this endpoint; the dedicated verification token grants no access to other APIs.
+
+Successful responses use the runtime envelope:
+
+```json
+{
+  "success": true,
+  "message": "OK",
+  "data": { "valid": true, "appId": "A0123456789", "challenge": null },
+  "meta": {}
+}
+```
+
+For `url_verification`, `challenge` contains the validated string. Your ingress must reply to Slack with the challenge; the verifier does not send that reply. An explicit `api_app_id` must match the configured app, including on challenges. Ordinary requests must have type `event_callback` and a matching `api_app_id`. The verifier checks the minimal envelope, not workspace authorization or business event fields.
+
+The body limit is 64 KiB. Slack timestamps may differ from server time by at most 300 seconds in either direction. Repeated valid requests inside that window remain valid: your ingress owns deduplication, retries and scheduling. No event is stored or executed by verification.
+
+| HTTP | errorCode                           | Meaning                                                  |
+| ---- | ----------------------------------- | -------------------------------------------------------- |
+| 400  | `invalid_event_payload`             | Invalid JSON, unsupported envelope, or invalid challenge |
+| 401  | `unauthorized`                      | Missing or incorrect dedicated token                     |
+| 401  | `invalid_webhook_signature`         | Invalid Slack signature                                  |
+| 401  | `invalid_webhook_timestamp`         | Invalid timestamp or outside the allowed window          |
+| 403  | `webhook_app_mismatch`              | App ID does not match the configured application         |
+| 404  | `event_verification_disabled`       | No verification token configured                         |
+| 409  | `event_verification_not_configured` | Default Slack App ID or Signing Secret missing           |
+| 413  | `webhook_request_too_large`         | Body exceeds 64 KiB                                      |
+
+Errors use the runtime failure envelope with `success: false`, `errorCode`, `message`, `data` and `meta`. Infrastructure failures remain server errors rather than invalid signatures.
+
+When updating the default OAuth app through `PUT /api/oauth/configs/slackbot`, keep the same `clientId` and omit `clientSecret` or individual `secretExtra` keys to retain their stored values. Submit a new `secretExtra.signingSecret` to rotate it, or an empty string to clear it. Other configuration fields retain their existing replacement semantics. The console keeps blank secret inputs unchanged and provides an explicit clear-on-save checkbox for optional secrets. Changing `clientId` starts a new application configuration and does not inherit old secrets. Already-created Connections retain their own metadata; verification always reads the current default application configuration.

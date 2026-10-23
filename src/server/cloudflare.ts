@@ -134,6 +134,7 @@ async function createCloudflareApp(env: CloudflareEnv, publicOrigin: string): Pr
     secretCodec,
     adminToken: env.OOMOL_CONNECT_ADMIN_TOKEN,
     runtimeToken: env.OOMOL_CONNECT_RUNTIME_TOKEN,
+    eventVerifyToken: env.OOMOL_CONNECT_EVENT_VERIFY_TOKEN,
     requireRuntimeAuth: Boolean(env.OAUTH_KV),
     actionPolicy: new ActionPolicyService({
       allowedActions: parseActionPolicyList(env.OOMOL_CONNECT_ALLOWED_ACTIONS),
@@ -200,6 +201,7 @@ function createCacheKey(env: CloudflareEnv, publicOrigin: string): string {
     configuredOrigin: env.OOMOL_CONNECT_ORIGIN ?? null,
     adminToken: env.OOMOL_CONNECT_ADMIN_TOKEN ?? "",
     runtimeToken: env.OOMOL_CONNECT_RUNTIME_TOKEN ?? "",
+    eventVerifyToken: env.OOMOL_CONNECT_EVENT_VERIFY_TOKEN ?? "",
     requireRuntimeAuth: Boolean(env.OAUTH_KV),
     encryptionKey: env.OOMOL_CONNECT_ENCRYPTION_KEY ?? "",
     allowedActions: env.OOMOL_CONNECT_ALLOWED_ACTIONS ?? "",

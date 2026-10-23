@@ -26,6 +26,7 @@ export type OpenApiDocument = {
   }>;
   paths: Record<string, unknown>;
   components: {
+    securitySchemes: Record<string, { type: "http"; scheme: "bearer"; description: string }>;
     schemas: Record<string, JsonSchema>;
   };
 };
@@ -93,7 +94,8 @@ const oauthClientConfigRequestSchema = jsonSchema.object(
   {
     clientId: jsonSchema.string({ description: "OAuth app client id." }),
     clientSecret: jsonSchema.string({
-      description: "OAuth app client secret. Optional only for public-client providers.",
+      description:
+        "OAuth app client secret. When updating the default app with the same clientId, omission preserves the stored secret. Required for a new confidential client.",
     }),
     requestedScopes: jsonSchema.array(jsonSchema.string(), {
       minItems: 1,
@@ -385,6 +387,63 @@ export function createOpenApiDocument(
         errorStatuses: [401, 404],
       },
     ),
+    "/v1/providers/slackbot/events/verify": {
+      post: {
+        tags: ["Triggers"],
+        summary: "Verify an inbound Slack Events API request.",
+        description:
+          "Requires the dedicated OOMOL_CONNECT_EVENT_VERIFY_TOKEN. The raw Slack request body is verified against the deployment-default slackbot OAuth client configuration, not a connection-specific configuration; no event is stored or scheduled.",
+        security: [{ eventVerificationToken: [] }],
+        parameters: [
+          {
+            name: "x-slack-request-timestamp",
+            in: "header",
+            required: true,
+            schema: jsonSchema.string(),
+          },
+          { name: "x-slack-signature", in: "header", required: true, schema: jsonSchema.string() },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+        },
+        responses: {
+          200: jsonResponse(
+            runtimeSuccessSchema({
+              type: "object",
+              properties: {
+                valid: { type: "boolean", const: true },
+                appId: { type: "string" },
+                challenge: jsonSchema.nullableString("Challenge value returned for Slack URL verification."),
+              },
+              required: ["valid", "appId", "challenge"],
+            }),
+          ),
+          400: jsonResponse(
+            runtimeFailureSchema(),
+            "invalid_event_payload: invalid JSON or unsupported Slack envelope.",
+          ),
+          401: jsonResponse(
+            runtimeFailureSchema(),
+            "unauthorized, invalid_webhook_signature, or invalid_webhook_timestamp.",
+          ),
+          403: jsonResponse(runtimeFailureSchema(), "webhook_app_mismatch."),
+          404: jsonResponse(
+            runtimeFailureSchema(),
+            "event_verification_disabled: no dedicated verification token is configured.",
+          ),
+          409: jsonResponse(
+            runtimeFailureSchema(),
+            "event_verification_not_configured: default Slack App ID or Signing Secret is missing.",
+          ),
+          413: jsonResponse(
+            runtimeFailureSchema(),
+            "webhook_request_too_large: the Slack request body exceeds 64 KiB.",
+          ),
+          500: jsonResponse(runtimeFailureSchema(), "Internal verification failure."),
+        },
+      },
+    },
     "/v1/providers/{service}/triggers/{triggerId}/execute": {
       post: {
         tags: ["Triggers"],
@@ -475,6 +534,13 @@ export function createOpenApiDocument(
     ],
     paths,
     components: {
+      securitySchemes: {
+        eventVerificationToken: {
+          type: "http",
+          scheme: "bearer",
+          description: "Dedicated OOMOL_CONNECT_EVENT_VERIFY_TOKEN; admin and runtime tokens are not accepted.",
+        },
+      },
       schemas: {
         ActionDefinition: jsonSchema.unknownObject("Public action catalog definition with runtime execution status."),
         LocalAuthSession: jsonSchema.object(
@@ -1509,7 +1575,7 @@ function createOAuthConfigPath(): Record<string, unknown> {
       tags: ["OAuth"],
       summary: "Upsert local OAuth client configuration.",
       description:
-        "Open-source users provide their own OAuth app. requestedScopes replaces the default scope list with an explicit selection from the provider's scopes and optionalScopes; default scopes are not added automatically. Omit it to use the defaults without optional scopes. Undeclared scopes are refused. Additional extra fields are declared by provider catalog auth metadata.",
+        "Open-source users provide their own OAuth app. requestedScopes replaces the default scope list with an explicit selection from the provider's scopes and optionalScopes; default scopes are not added automatically. Omit it to use the defaults without optional scopes. Undeclared scopes are refused. Additional extra fields are declared by provider catalog auth metadata. For the same clientId, omitted clientSecret and omitted secretExtra keys retain saved secrets. Explicit empty secretExtra values clear optional secrets. Changing clientId requires new secrets.",
       requestBody: {
         required: true,
         content: {

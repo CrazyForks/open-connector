@@ -76,6 +76,7 @@ async function main(): Promise<void> {
     encryptionKey: process.env.OOMOL_CONNECT_ENCRYPTION_KEY,
     adminToken: optionalEnv("OOMOL_CONNECT_ADMIN_TOKEN"),
     runtimeToken: optionalEnv("OOMOL_CONNECT_RUNTIME_TOKEN"),
+    eventVerifyToken: optionalEnv("OOMOL_CONNECT_EVENT_VERIFY_TOKEN"),
     jwt: {
       jwksUri: process.env.OOMOL_CONNECT_JWKS_URI,
       issuer: process.env.OOMOL_CONNECT_JWT_ISSUER,

@@ -66,11 +66,14 @@ export function OAuthAppForm(props: OAuthAppFormProps): ReactNode {
   const [extraValues, setExtraValues] = useState(() =>
     initialClientConfigFieldValues(clientConfigFields, props.config),
   );
+  const [clearedSecrets, setClearedSecrets] = useState<Record<string, boolean>>({});
+  const sameClient = configured && clientId === props.config?.clientId;
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setClientId(props.config?.clientId ?? "");
     setClientSecret("");
+    setClearedSecrets({});
     setExtraValues(initialClientConfigFieldValues(clientConfigFields, props.config));
     setStatus(null);
   }, [props.provider.service, props.config?.clientId, clientConfigFields]);
@@ -80,9 +83,12 @@ export function OAuthAppForm(props: OAuthAppFormProps): ReactNode {
     setStatus(t("providers.oauthClientSettings.saving"));
     try {
       const { extra, secretExtra } = splitClientConfigFieldValues(clientConfigFields, extraValues);
+      for (const key of Object.keys(secretExtra)) {
+        if (!secretExtra[key]?.trim() && !clearedSecrets[key]) delete secretExtra[key];
+      }
       await apiPut(`/api/oauth/configs/${props.provider.service}`, {
         clientId,
-        clientSecret,
+        clientSecret: clientSecret || undefined,
         extra,
         secretExtra,
       });
@@ -127,19 +133,43 @@ export function OAuthAppForm(props: OAuthAppFormProps): ReactNode {
             type="password"
             value={clientSecret}
             onChange={(event) => setClientSecret(event.target.value)}
-            required
+            required={!sameClient || props.config?.missingFields?.includes("clientSecret")}
           />
-          {configured ? <small>{t("providers.oauthClientSettings.storedSecretHint")}</small> : null}
+          {sameClient ? <small>{t("providers.oauthClientSettings.storedSecretHint")}</small> : null}
         </Label>
       ) : null}
-      {clientConfigFields.map((field) => (
-        <CredentialInput
-          key={field.key}
-          field={field}
-          value={extraValues[field.key] ?? ""}
-          onChange={(value) => setExtraValues((previous) => ({ ...previous, [field.key]: value }))}
-        />
-      ))}
+      {clientConfigFields.map((field) => {
+        const storedSecret = sameClient && field.location === "secretExtra";
+        return (
+          <div key={field.key} className="grid gap-2">
+            <CredentialInput
+              field={{
+                ...field,
+                required: field.required && (!storedSecret || !!props.config?.missingFields?.includes(field.key)),
+              }}
+              value={extraValues[field.key] ?? ""}
+              onChange={(value) => {
+                setExtraValues((previous) => ({ ...previous, [field.key]: value }));
+                setClearedSecrets((previous) => ({ ...previous, [field.key]: false }));
+              }}
+            />
+            {storedSecret ? <small>{t("providers.oauthClientSettings.storedSecretHint")}</small> : null}
+            {storedSecret && !field.required ? (
+              <Label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!clearedSecrets[field.key]}
+                  onChange={(event) => {
+                    setClearedSecrets((previous) => ({ ...previous, [field.key]: event.target.checked }));
+                    setExtraValues((previous) => ({ ...previous, [field.key]: "" }));
+                  }}
+                />
+                {t("providers.oauthClientSettings.clearSecret", { name: field.label })}
+              </Label>
+            ) : null}
+          </div>
+        );
+      })}
       <div className="button-row">
         <Button type="submit">
           <Settings size={16} />

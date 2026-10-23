@@ -273,3 +273,29 @@ interface ConnectionGrantSchema {
   description: string;
   items: { type: string; minLength: number; maxLength: number; pattern: string };
 }
+
+describe("Slack verification contract", () => {
+  it("documents dedicated bearer authentication and runtime response envelopes", () => {
+    const document = createOpenApiDocument([provider]);
+    const route = document.paths["/v1/providers/slackbot/events/verify"] as {
+      post: {
+        security: unknown;
+        responses: Record<
+          string,
+          { content: { "application/json": { schema: { properties: Record<string, unknown> } } } }
+        >;
+      };
+    };
+    expect(route.post.security).toEqual([{ eventVerificationToken: [] }]);
+    expect(document.components.securitySchemes.eventVerificationToken).toMatchObject({
+      type: "http",
+      scheme: "bearer",
+    });
+    for (const status of [200, 400, 401, 403, 404, 409, 413, 500]) {
+      const properties = route.post.responses[status]!.content["application/json"].schema.properties;
+      expect(properties).toHaveProperty("success");
+      expect(properties).toHaveProperty("data");
+      if (status !== 200) expect(properties).toHaveProperty("errorCode");
+    }
+  });
+});

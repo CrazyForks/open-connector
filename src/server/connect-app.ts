@@ -38,6 +38,7 @@ export interface ConnectAppOptions {
   secretCodec: ISecretCodec;
   adminToken?: string;
   runtimeToken?: string;
+  eventVerifyToken?: string;
   requireRuntimeAuth?: boolean;
   allowedCustomOAuth?: string[];
   verifyRuntimeJwt?: RuntimeJwtVerifier;
@@ -160,6 +161,7 @@ export async function createConnectApp(options: ConnectAppOptions): Promise<Conn
       runtimeTokens,
       runtimePolicyStore: options.runtimeDatabase.runtimePolicyStore,
       registerStaticRoutes: options.registerStaticRoutes,
+      eventVerifyToken: options.eventVerifyToken,
       auth: {
         adminToken: options.adminToken,
         runtimeToken: options.runtimeToken,

@@ -6,6 +6,48 @@ import { createCatalogStore } from "../catalog-store.ts";
 import { OAuthClientConfigService } from "./oauth-client-config-service.ts";
 
 describe("OAuthClientConfigService", () => {
+  it("preserves omitted secrets only for the same client and supports explicit rotation and clearing", async () => {
+    const provider = oauthProvider("example");
+    const auth = provider.auth[0]!;
+    if (auth.type !== "oauth2") throw new Error("Expected OAuth fixture");
+    auth.clientConfigFields = [
+      {
+        key: "signingSecret",
+        label: "Signing Secret",
+        inputType: "password",
+        required: false,
+        secret: true,
+        location: "secretExtra",
+      },
+    ];
+    const service = new OAuthClientConfigService({
+      catalog: createCatalogStore([provider]),
+      origin: "http://localhost:3000",
+      store: new MemoryOAuthClientConfigStore(),
+    });
+    await service.upsertConfig({
+      service: "example",
+      clientId: "client",
+      clientSecret: "oauth-secret",
+      secretExtra: { signingSecret: "original" },
+    });
+    await service.upsertConfig({ service: "example", clientId: "client" });
+    expect(await service.getConfig("example")).toMatchObject({
+      clientSecret: "oauth-secret",
+      secretExtra: { signingSecret: "original" },
+    });
+    await service.upsertConfig({ service: "example", clientId: "client", secretExtra: { signingSecret: "rotated" } });
+    expect((await service.getConfig("example"))?.secretExtra).toEqual({ signingSecret: "rotated" });
+    await service.upsertConfig({ service: "example", clientId: "client", secretExtra: { signingSecret: "" } });
+    expect((await service.getConfig("example"))?.secretExtra).toEqual({});
+    await service.upsertConfig({ service: "example", clientId: "client", secretExtra: { signingSecret: "restored" } });
+    await expect(service.upsertConfig({ service: "example", clientId: "another-client" })).rejects.toThrow(
+      "clientSecret is required",
+    );
+    await service.upsertConfig({ service: "example", clientId: "another-client", clientSecret: "new-oauth-secret" });
+    expect((await service.getConfig("example"))?.secretExtra).toEqual({});
+  });
+
   it("lists configured OAuth clients before unconfigured OAuth providers", async () => {
     const store = new MemoryOAuthClientConfigStore();
     await store.set({
