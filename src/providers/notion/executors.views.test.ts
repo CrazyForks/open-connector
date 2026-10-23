@@ -203,7 +203,10 @@ describe("Notion saved views", () => {
     expect(valid({ configuration: { type: "dashboard" } })).toBe(false);
     expect(valid({ sorts: [{ timestamp: "created_time", direction: "descending" }] })).toBe(false);
     expect(valid({ sorts: [{ property: "Status", direction: "backwards" }] })).toBe(false);
-    expect(valid({ sorts: Array.from({ length: 101 }, () => ({ property: "Status" })) })).toBe(false);
+    expect(valid({ sorts: [{ property: "Status" }] })).toBe(false);
+    expect(valid({ sorts: Array.from({ length: 101 }, () => ({ property: "Status", direction: "ascending" })) })).toBe(
+      false,
+    );
   });
 
   it("declares read permissions for inspection and only update permission for mutations", () => {

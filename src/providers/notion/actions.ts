@@ -821,7 +821,7 @@ export const notionActions: ActionDefinition[] = [
                 property: s.string({ minLength: 1, description: "The property name or ID to sort by." }),
                 direction: s.stringEnum(["ascending", "descending"], { description: "The sort direction." }),
               },
-              { required: ["property"] },
+              { required: ["property", "direction"] },
             ),
             { maxItems: 100, description: "Property-based sorts. Pass null to clear sorting." },
           ),
