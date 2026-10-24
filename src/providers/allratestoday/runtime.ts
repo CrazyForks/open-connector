@@ -136,7 +136,8 @@ export async function readAllRatesTodayError(response: Response): Promise<Provid
     parseProviderJsonBodyText(text, { emptyBody: {}, invalidJsonMessage: "", invalidJsonFallback: () => ({}) }),
   );
   const message =
-    optionalRawString(body?.message) ?? (text.slice(0, 200) || `AllRatesToday request failed with HTTP ${response.status}`);
+    optionalRawString(body?.message) ??
+    (text.slice(0, 200) || `AllRatesToday request failed with HTTP ${response.status}`);
   if (body?.["error-type"] === "unsupported-code") {
     return providerInputError(message);
   }
