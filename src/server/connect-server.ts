@@ -91,6 +91,8 @@ export interface IConnectServerOptions {
   serveDocumentation?: boolean;
   /** Seconds the OAuth completion page waits before closing its window. `0` closes it as soon as it loads. */
   oauthCloseDelaySeconds?: number;
+  /** Origins a provider-refusal page may post its result to (`OOMOL_CONNECT_OAUTH_RESULT_ORIGINS`). */
+  oauthResultOrigins?: readonly string[];
   marketplace?: MarketplaceService;
   saasProject?: SaasProjectService;
   saas?: SaasExecutionService;
@@ -355,6 +357,7 @@ export class ConnectServer {
         saasProject: this.options.saasProject,
         logger: this.options.logger,
         oauthCloseDelaySeconds: this.options.oauthCloseDelaySeconds,
+        oauthResultOrigins: this.options.oauthResultOrigins,
       }),
     );
 

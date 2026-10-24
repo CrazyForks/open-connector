@@ -12,7 +12,7 @@ import { ActionPolicyService } from "../core/action-policy.ts";
 import { setEgressTrustedHosts, setPrivateNetworkAccessAllowed } from "../core/request.ts";
 import { ProviderLoader } from "../providers/provider-loader.ts";
 import { executorModules } from "../providers/registry.generated.ts";
-import { DEFAULT_OAUTH_CLOSE_DELAY_SECONDS } from "./api/oauth-completion-page.ts";
+import { DEFAULT_OAUTH_CLOSE_DELAY_SECONDS, normalizeOAuthResultOrigins } from "./api/oauth-completion-page.ts";
 import { createRuntimeJwtVerifier } from "./api/runtime-jwt.ts";
 import { createConnectApp } from "./connect-app.ts";
 import { getConnectorAssetDirectory } from "./connector-assets.ts";
@@ -105,6 +105,8 @@ export interface ConnectorRuntimeOptions {
   apiReference?: boolean;
   /** Seconds the OAuth completion page waits before closing its window. Defaults to 5; `0` closes it as soon as it loads. */
   oauthCloseDelaySeconds?: number;
+  /** Exact origins a provider-refusal callback page may post its result to. Never `*`. */
+  oauthResultOrigins?: string[];
 }
 
 /** Standard web requests are the host boundary; credentials, databases and framework objects stay private. */
@@ -154,6 +156,9 @@ async function openRuntime(options: ConnectorRuntimeOptions): Promise<ConnectorR
   const oauthCloseDelaySeconds = options.oauthCloseDelaySeconds ?? DEFAULT_OAUTH_CLOSE_DELAY_SECONDS;
   if (!Number.isInteger(oauthCloseDelaySeconds) || oauthCloseDelaySeconds < 0)
     throw new Error("oauthCloseDelaySeconds must be a non-negative integer of seconds.");
+  // The same rules as `OOMOL_CONNECT_OAUTH_RESULT_ORIGINS`: a host passing the option directly must not be able
+  // to make the refusal page post OAuth state to `*` or to a value that is not an origin.
+  const oauthResultOrigins = normalizeOAuthResultOrigins(options.oauthResultOrigins ?? []);
   const assetDirectory = getConnectorAssetDirectory();
   const assets = options.assets ?? {
     catalogDir: join(assetDirectory, "catalog/apps"),
@@ -236,6 +241,7 @@ async function openRuntime(options: ConnectorRuntimeOptions): Promise<ConnectorR
       logger: options.logger,
       serveDocumentation: options.apiReference ?? false,
       oauthCloseDelaySeconds,
+      oauthResultOrigins,
     });
     saasCleanup.start();
     triggerMaintenance.start();

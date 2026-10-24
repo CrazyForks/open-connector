@@ -1803,20 +1803,72 @@ describe("ConnectServer", () => {
     }
   });
 
-  it("surfaces provider errors returned on the OAuth callback", async () => {
+  it("shows a provider error on the OAuth callback as a page, not JSON", async () => {
     const app = createTestServer([apiKeyProvider], { auth: { adminToken: "local-token" } }).createApp();
 
     const response = await app.request(
       "/oauth/callback?error=invalid_scope&error_description=The+requested+scope+is+invalid.&state=example-state",
     );
+    const html = await response.text();
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: {
-        code: "oauth_provider_error",
-        message: 'OAuth provider returned error "invalid_scope": The requested scope is invalid.',
-      },
+    expect(response.status, html).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(html).toContain("Authorization not completed");
+    expect(html).toContain("<code>invalid_scope</code>");
+    // No result origin is configured, so the page posts nothing to its opener.
+    expect(html).not.toContain("postMessage");
+  });
+
+  it("posts a cancelled authorization to the configured opener origin only, and never completes it later", async () => {
+    const app = createTestServer([oauthProvider], {
+      oauthResultOrigins: ["https://console.example.com"],
+      oauthCloseDelaySeconds: 2,
+    }).createApp();
+    const config = await app.request("/api/oauth/configs/oauth_example", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientId: "client-id",
+        clientSecret: "client-secret",
+        secretExtra: { appBearerToken: "app-token" },
+      }),
     });
+    expect(config.status).toBe(200);
+    const authorization = await app.request("/api/oauth/authorizations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ service: "oauth_example" }),
+    });
+    const { state } = (await authorization.json()) as { state: string };
+
+    const callback = await app.request(`/oauth/callback?error=access_denied&state=${state}`);
+    const html = await callback.text();
+
+    expect(callback.status, html).toBe(200);
+    expect(callback.headers.get("content-type")).toContain("text/html");
+    expect(html).toContain("Authorization cancelled");
+    const result = JSON.stringify({ type: "oauth.refused", status: "cancelled", code: "access_denied", state });
+    expect(html).toContain(`const result=${result}`);
+    expect(html).toContain('for(const origin of ["https://console.example.com"])');
+    expect(html).toContain("window.opener.postMessage(result,origin)");
+    expect(html).not.toMatch(/postMessage\([^)]*"\*"/);
+    // The refusal page honours the configured close delay like the completion page.
+    expect(html).toContain("let remaining=2;");
+
+    // A duplicate refusal for a state no longer pending (here: already
+    // refused; equally, already completed by another callback) still gets the
+    // page, but claims nothing about that authorization to the opener.
+    const duplicate = await app.request(`/oauth/callback?error=access_denied&state=${state}`);
+    const duplicateHtml = await duplicate.text();
+    expect(duplicate.status, duplicateHtml).toBe(200);
+    expect(duplicateHtml).toContain("Authorization cancelled");
+    expect(duplicateHtml).not.toContain("postMessage");
+    expect(duplicateHtml).not.toContain(state);
+
+    // A refused authorization can never be completed afterwards.
+    const late = await app.request(`/oauth/callback?state=${state}&code=example-code`);
+    expect(late.status).toBe(400);
+    await expect(late.json()).resolves.toMatchObject({ error: { code: "invalid_oauth_state" } });
   });
 
   it("accepts the shared OAuth callback route without a service path segment", async () => {
@@ -4210,6 +4262,7 @@ interface CreateTestServerOptions {
   secretCodec?: ISecretCodec;
   allowedCustomOAuth?: string[];
   oauthCloseDelaySeconds?: number;
+  oauthResultOrigins?: string[];
   eventVerifyToken?: string;
 }
 
@@ -4290,6 +4343,7 @@ function createTestServer(providers: ProviderDefinition[], options: CreateTestSe
     actionSearch: options.actionSearch,
     logger: options.logger,
     oauthCloseDelaySeconds: options.oauthCloseDelaySeconds,
+    oauthResultOrigins: options.oauthResultOrigins,
     eventVerifyToken: options.eventVerifyToken,
   });
 }

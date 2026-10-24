@@ -25,6 +25,10 @@ export const oauthCompletionStrings = {
     network: "Could not reach Connect. Check your connection and try again.",
     notFound: "This request was not found or has expired. Return to the initiating client.",
     forbidden: "Synchronization was rejected. Check that OOMOL_CONNECT_ORIGIN matches your Console address.",
+    refusedBadge: "Not connected",
+    cancelledTitle: "Authorization cancelled",
+    refusedTitle: "Authorization not completed",
+    refusedBody: "Nothing was connected. Close this window to return where you started.",
   },
   "zh-CN": {
     badge: "已连接",
@@ -45,6 +49,10 @@ export const oauthCompletionStrings = {
     network: "无法连接到 Connect，请检查网络后重试。",
     notFound: "授权请求不存在或已过期，请返回发起授权的应用。",
     forbidden: "同步请求被拒绝，请检查 OOMOL_CONNECT_ORIGIN 是否与控制台地址一致。",
+    refusedBadge: "未连接",
+    cancelledTitle: "已取消授权",
+    refusedTitle: "授权未完成",
+    refusedBody: "未建立任何连接。关闭此窗口即可返回刚才的应用。",
   },
   "zh-TW": {
     badge: "已連線",
@@ -65,6 +73,10 @@ export const oauthCompletionStrings = {
     network: "無法連線至 Connect，請檢查網路後重試。",
     notFound: "授權請求不存在或已過期，請返回發起授權的應用。",
     forbidden: "同步請求遭拒，請檢查 OOMOL_CONNECT_ORIGIN 是否與控制台位址一致。",
+    refusedBadge: "未連線",
+    cancelledTitle: "已取消授權",
+    refusedTitle: "授權未完成",
+    refusedBody: "未建立任何連線。關閉此視窗即可返回剛才的應用。",
   },
   ja: {
     badge: "接続済み",
@@ -85,6 +97,10 @@ export const oauthCompletionStrings = {
     network: "Connect に接続できません。ネットワークを確認して再試行してください。",
     notFound: "リクエストが見つからないか期限切れです。元のアプリに戻ってください。",
     forbidden: "同期が拒否されました。OOMOL_CONNECT_ORIGIN とコンソールのアドレスを確認してください。",
+    refusedBadge: "未接続",
+    cancelledTitle: "認可をキャンセルしました",
+    refusedTitle: "認可は完了しませんでした",
+    refusedBody: "接続は作成されていません。このウィンドウを閉じて元のアプリに戻ってください。",
   },
   fr: {
     badge: "Connecté",
@@ -105,6 +121,10 @@ export const oauthCompletionStrings = {
     network: "Connect est inaccessible. Vérifiez votre connexion et réessayez.",
     notFound: "Cette demande est introuvable ou expirée. Revenez à l’application de départ.",
     forbidden: "Synchronisation refusée. Vérifiez que OOMOL_CONNECT_ORIGIN correspond à l’adresse de la Console.",
+    refusedBadge: "Non connecté",
+    cancelledTitle: "Autorisation annulée",
+    refusedTitle: "Autorisation non terminée",
+    refusedBody: "Aucune connexion n’a été créée. Fermez cette fenêtre pour revenir à l’application de départ.",
   },
   ru: {
     badge: "Подключено",
@@ -126,6 +146,10 @@ export const oauthCompletionStrings = {
     network: "Нет связи с Connect. Проверьте сеть и повторите попытку.",
     notFound: "Запрос не найден или истёк. Вернитесь в исходное приложение.",
     forbidden: "Синхронизация отклонена. Проверьте соответствие OOMOL_CONNECT_ORIGIN адресу консоли.",
+    refusedBadge: "Не подключено",
+    cancelledTitle: "Авторизация отменена",
+    refusedTitle: "Авторизация не завершена",
+    refusedBody: "Подключение не создано. Закройте это окно, чтобы вернуться в исходное приложение.",
   },
 };
 
@@ -246,6 +270,21 @@ export const oauthCompletionLocaleScript = `const pick=()=>{try{const stored=loc
 /** Seconds the OAuth completion page counts down before it tries to close its window. */
 export const DEFAULT_OAUTH_CLOSE_DELAY_SECONDS = 5;
 
+// Shared by every page this module renders: count down, then close the window,
+// or say it can be closed when the browser refuses.
+function oauthCloseWindowScript(closeDelaySeconds: number): string {
+  return `const note=document.querySelector("[data-close-note]");
+const button=document.querySelector("[data-t=closeButton]");
+const showManual=()=>{if(note)note.textContent=t.manualClose;};
+// window.close() only works for script-opened windows; on a tab the user
+// navigated to it is a no-op. Attempt it, then fall back to a manual hint.
+const tryClose=()=>{window.close();setTimeout(showManual,300);};
+if(button)button.addEventListener("click",tryClose);
+let remaining=${scriptJson(closeDelaySeconds)};
+const tick=()=>{if(remaining<=0){tryClose();return;}if(note)note.textContent=t.autoClose.replace("%N%",String(remaining));remaining-=1;setTimeout(tick,1000);};
+tick();`;
+}
+
 export function renderOAuthCompletionPage(
   service: string,
   closeDelaySeconds: number = DEFAULT_OAUTH_CLOSE_DELAY_SECONDS,
@@ -282,16 +321,7 @@ const t=STR[pick()]||STR.en;
 document.documentElement.lang=pick();
 for(const el of document.querySelectorAll("[data-t]")){const key=el.getAttribute("data-t");if(t[key]!=null)el.textContent=t[key];}
 if(t.title)document.title=t.title;
-const note=document.querySelector("[data-close-note]");
-const button=document.querySelector("[data-t=closeButton]");
-const showManual=()=>{if(note)note.textContent=t.manualClose;};
-// window.close() only works for script-opened windows; on a tab the user
-// navigated to it is a no-op. Attempt it, then fall back to a manual hint.
-const tryClose=()=>{window.close();setTimeout(showManual,300);};
-if(button)button.addEventListener("click",tryClose);
-let remaining=${scriptJson(closeDelaySeconds)};
-const tick=()=>{if(remaining<=0){tryClose();return;}if(note)note.textContent=t.autoClose.replace("%N%",String(remaining));remaining-=1;setTimeout(tick,1000);};
-tick();
+${oauthCloseWindowScript(closeDelaySeconds)}
 })();</script>
 </body>
 </html>`;
@@ -299,4 +329,114 @@ tick();
 
 function scriptJson(value: unknown): string {
   return JSON.stringify(value).replaceAll("<", "\\u003c");
+}
+
+/** The `type` of the message a refusal page posts to the window that opened it. */
+export const oauthRefusedType = "oauth.refused";
+
+/**
+ * Reads the origins a refusal page may post its result to: a comma-separated
+ * list of exact HTTP(S) origins. `*` and anything that is not an origin are
+ * rejected, so the result can never be broadcast to an arbitrary opener.
+ */
+export function parseOAuthResultOrigins(value: string | undefined): string[] {
+  return normalizeOAuthResultOrigins((value ?? "").split(","));
+}
+
+/**
+ * The same rules for origins given as a list, such as the `oauthResultOrigins`
+ * runtime option: blank entries are skipped and duplicates dropped; anything
+ * that is not an exact http(s) origin, `*` included, throws.
+ */
+export function normalizeOAuthResultOrigins(entries: readonly string[]): string[] {
+  const origins: string[] = [];
+  for (const raw of entries) {
+    const entry = raw.trim().replace(/\/+$/, "");
+    if (!entry) continue;
+    let origin: string | undefined;
+    try {
+      const url = new URL(entry);
+      if (url.protocol === "http:" || url.protocol === "https:") origin = url.origin;
+    } catch {
+      origin = undefined;
+    }
+    if (origin !== entry) {
+      throw new Error(
+        `OAuth result origin "${entry}" must be an exact http(s) origin such as https://console.example.com.`,
+      );
+    }
+    if (!origins.includes(origin)) origins.push(origin);
+  }
+  return origins;
+}
+
+/** A provider error code that is safe to echo: short and code-shaped, else `provider_error`. */
+export function oauthProviderErrorCode(providerError: string): string {
+  return /^[A-Za-z0-9_.-]{1,64}$/.test(providerError) ? providerError : "provider_error";
+}
+
+export interface OAuthRefusedPageInput {
+  /** The provider's error code, already passed through `oauthProviderErrorCode`. */
+  code: string;
+  /** The state of the refused authorization; set only when this callback ended a pending one. */
+  state?: string;
+  /** Origins allowed to receive the result; empty means the page posts nothing. */
+  resultOrigins: readonly string[];
+  closeDelaySeconds?: number;
+}
+
+/**
+ * The page a provider's refusal lands on when the authorization has no return
+ * address. When this window was opened by a page on an allowed origin, it
+ * posts `{ type: "oauth.refused", status, code, state }` to that origin only;
+ * either way the shared countdown closes it after `closeDelaySeconds`. Success is never
+ * reported this way: the opener learns it from its own server.
+ */
+export function renderOAuthRefusedPage(input: OAuthRefusedPageInput): string {
+  const closeDelaySeconds = input.closeDelaySeconds ?? DEFAULT_OAUTH_CLOSE_DELAY_SECONDS;
+  const cancelled = input.code === "access_denied";
+  const titleKey = cancelled ? "cancelledTitle" : "refusedTitle";
+  const strings = oauthCompletionStrings.en;
+  const result = {
+    type: oauthRefusedType,
+    status: cancelled ? "cancelled" : "error",
+    code: input.code,
+    state: input.state,
+  };
+  const codeLine = cancelled ? "" : `\n    <p><code>${input.code}</code></p>`;
+  const postScript =
+    input.resultOrigins.length > 0 && input.state
+      ? `if(window.opener){const result=${scriptJson(result)};for(const origin of ${scriptJson(input.resultOrigins)}){try{window.opener.postMessage(result,origin);}catch{}}}\n`
+      : "";
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${strings[titleKey]}</title>
+<style>${oauthCompletionStyles}</style>
+</head>
+<body>
+<main class="card" role="status" aria-live="polite">
+  <div class="header">
+    <span class="badge" data-t="refusedBadge">${strings.refusedBadge}</span>
+    <h1 data-t="${titleKey}">${strings[titleKey]}</h1>
+    <p data-t="refusedBody">${strings.refusedBody}</p>${codeLine}
+  </div>
+  <div class="actions">
+    <button class="button" type="button" data-t="closeButton">${strings.closeButton}</button>
+    <p class="close-note" data-close-note>${strings.autoClose.replace("%N%", String(closeDelaySeconds))}</p>
+  </div>
+</main>
+<script>(()=>{
+${postScript}const STR=${scriptJson(oauthCompletionStrings)};
+${oauthCompletionLocaleScript}
+const t=STR[pick()]||STR.en;
+document.documentElement.lang=pick();
+for(const el of document.querySelectorAll("[data-t]")){const key=el.getAttribute("data-t");if(t[key]!=null)el.textContent=t[key];}
+if(t[${scriptJson(titleKey)}])document.title=t[${scriptJson(titleKey)}];
+${oauthCloseWindowScript(closeDelaySeconds)}
+})();</script>
+</body>
+</html>`;
 }

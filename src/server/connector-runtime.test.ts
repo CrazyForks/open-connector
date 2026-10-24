@@ -433,6 +433,9 @@ describe("headless runtime", () => {
     const options = await fixture();
     await expect(createConnectorRuntime({ ...options, publicOrigin: "file:///bad" })).rejects.toThrow("publicOrigin");
     await expect(createConnectorRuntime({ ...options, transitFiles: { maxBytes: 0 } })).rejects.toThrow("maxBytes");
+    await expect(createConnectorRuntime({ ...options, oauthResultOrigins: ["*"] })).rejects.toThrow(
+      "exact http(s) origin",
+    );
     runtime = await createConnectorRuntime(options);
     await expect(createConnectorRuntime(options)).rejects.toThrow("Only one");
     await runtime.close();

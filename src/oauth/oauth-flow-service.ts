@@ -200,6 +200,16 @@ export class OAuthFlowService {
     );
   }
 
+  /**
+   * Ends a runtime authorization (`POST /api/oauth/authorizations`) that the
+   * provider refused, so a later callback for the same state cannot complete
+   * it. Returns false when no such authorization was pending (unknown, or
+   * already completed or refused by another callback).
+   */
+  async discardAuthorization(state: string): Promise<boolean> {
+    return (await this.states.take(state)) !== undefined;
+  }
+
   private async prepareAuthorization(
     input: OAuthAuthorizationStartInput,
     requestConfig?: OAuthClientConfig,

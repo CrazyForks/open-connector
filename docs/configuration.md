@@ -48,6 +48,7 @@ through runtime options to admit, delay or deny each upstream HTTP attempt.
 | `OOMOL_CONNECT_CATALOG_LAZY_SCHEMAS`        | `false`                   | Read action JSON schemas from the catalog files on demand instead of keeping them in memory. See below.                                                                     |
 | `OOMOL_CONNECT_CATALOG_SCHEMA_CACHE_FILES`  | `64`                      | Provider files whose action schemas stay cached when lazy schemas are on.                                                                                                   |
 | `OOMOL_CONNECT_OAUTH_CLOSE_DELAY_SECONDS`   | `5`                       | Seconds the OAuth completion page waits before closing its window. `0` closes it as soon as it loads.                                                                       |
+| `OOMOL_CONNECT_OAUTH_RESULT_ORIGINS`        | unset                     | Comma-separated exact origins a provider-refusal callback page may `postMessage` its result to (its opener). `*` is refused.                                                |
 
 Example:
 
