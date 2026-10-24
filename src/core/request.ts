@@ -1,5 +1,7 @@
 import type { TransitFileUpload, TransitFileWriter } from "./types.ts";
 
+import { getProviderNetworkPolicy } from "./provider-network-policy.ts";
+
 /**
  * Query parameter values accepted by provider HTTP helpers.
  */
@@ -306,8 +308,8 @@ export interface PublicHttpUrlOptions {
 }
 
 /**
- * Deployment-level opt-in that lets self-hosted provider connections (currently
- * Dokploy) target RFC 1918, carrier-grade-NAT, and private-hostname addresses.
+ * Read the active asynchronous runtime context’s private-network permission.
+ * Self-hosted providers opt into this permission through their URL and transport guards.
  *
  * Off by default so a shared/multi-tenant runtime keeps a public-only SSRF guard
  * and a tenant cannot turn a self-hosted connection into an SSRF pivot into the
@@ -317,16 +319,8 @@ export interface PublicHttpUrlOptions {
  * Even when enabled, reserved, loopback, link-local, cloud-metadata, multicast,
  * and IPv6 targets remain blocked by {@link assertPublicHttpUrl}.
  */
-let privateNetworkAccessAllowed = false;
-
-/** Configure whether opted-in providers may target private networks (called once at deployment bootstrap). */
-export function setPrivateNetworkAccessAllowed(allowed: boolean): void {
-  privateNetworkAccessAllowed = allowed;
-}
-
-/** Whether the current deployment allows opted-in providers to target private networks. */
 export function isPrivateNetworkAccessAllowed(): boolean {
-  return privateNetworkAccessAllowed;
+  return getProviderNetworkPolicy().allowPrivateNetwork ?? false;
 }
 
 /** Parse the `OOMOL_CONNECT_ALLOW_PRIVATE_NETWORK` flag; only explicit truthy values enable it. */
@@ -339,37 +333,16 @@ export function parsePrivateNetworkAccessFlag(value: string | undefined): boolea
 }
 
 /**
- * Hosts whose DNS-resolved addresses may use private or VPN-mapped ranges.
+ * Whether the active runtime trusts this hostname's private or VPN-mapped DNS answers.
+ * No hosts are trusted outside a configured runtime context.
  *
- * Zero-trust corporate VPNs (aTrust / EasyConnect class) resolve public SaaS
- * domains into a reserved range — commonly `198.18.0.0/15` — and tunnel the
- * traffic from there, so on those networks a reserved address is the normal
- * path to the real service rather than an SSRF target. Reserved ranges are
- * checked unconditionally, so {@link isPrivateNetworkAccessAllowed} cannot open
- * them, and there is otherwise no way for an operator to say "this host is
- * reachable through my VPN". Loopback, link-local, cloud-metadata, multicast,
- * and other unsafe special-use ranges remain blocked. Empty by default.
- */
-let egressTrustedHosts: readonly string[] = [];
-
-/**
- * Configure the hosts that may resolve through private or VPN-mapped ranges
- * (called once at deployment bootstrap).
- */
-export function setEgressTrustedHosts(hosts: readonly string[]): void {
-  egressTrustedHosts = hosts;
-}
-
-/**
- * Whether `hostname` may resolve through private or VPN-mapped ranges.
- *
- * An entry starting with `.` matches that domain and its subdomains
- * (`.feishu.cn` covers `feishu.cn` and `open.feishu.cn`); any other entry must
- * match the host exactly. Only affects addresses a hostname resolves to — a URL
- * whose host is already a literal private or reserved IP is rejected earlier by
- * {@link assertPublicHttpUrl} and this list does not reach it.
+ * An entry starting with `.` matches the domain and its subdomains; other entries
+ * match exactly. The exception applies only to DNS answers, not literal IP URLs.
+ * It supports corporate VPNs that map public domains into private or benchmark
+ * ranges. Loopback, link-local, cloud-metadata and other unsafe addresses remain blocked.
  */
 export function isEgressTrustedHost(hostname: string): boolean {
+  const egressTrustedHosts = getProviderNetworkPolicy().trustedHosts ?? [];
   if (egressTrustedHosts.length === 0) {
     return false;
   }

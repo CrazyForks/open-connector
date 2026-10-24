@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { sourceScanTimeout } from "./provider-source-guards.support.ts";
 
 const sourceDir = fileURLToPath(new URL(".", import.meta.url));
 
@@ -49,12 +50,14 @@ function lineOf(source: string, index: number): number {
   return line;
 }
 
-describe("provider schema pattern guard", () => {
+const sourceFiles = listSourceFiles(sourceDir);
+
+describe("provider schema pattern guard", { timeout: sourceScanTimeout(sourceFiles.length) }, () => {
   it("keeps every provider JSON-Schema pattern compilable", () => {
     const offenders: string[] = [];
     let scannedFiles = 0;
     let scannedPatterns = 0;
-    for (const file of listSourceFiles(sourceDir)) {
+    for (const file of sourceFiles) {
       // `operations` is a module directory, not a file-name shape.
       const normalized = file.replaceAll("\\", "/");
       if (!schemaModuleName.test(basename(file)) && !normalized.includes("/operations/")) {

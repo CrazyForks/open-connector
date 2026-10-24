@@ -1,5 +1,6 @@
 import type { ProviderErrorCode } from "../core/provider-error-codes.ts";
 import type { ProviderDispatchContext, ProviderHttpDispatchOptions } from "../core/provider-http-dispatch.ts";
+import type { ProviderNetworkPolicy } from "../core/provider-network-policy.ts";
 import type {
   ActionExecutor,
   ExecutionContext,
@@ -38,9 +39,11 @@ import { readBoundedResponseBytes } from "../core/request.ts";
 export type ProviderFetch = typeof fetch;
 
 export interface ProviderFetchOptions {
+  /** Bind runtime policy; private targets still require the transport's allowPrivateNetwork opt-in. */
+  network?: ProviderNetworkPolicy;
   /** Base transport; defaults to the global fetch. A guarded fetch is unwrapped so guards never stack. */
   fetch?: ProviderFetch;
-  /** Allow private-network targets for this provider's egress (see `assertPublicHttpUrl`); default public-only. */
+  /** Opt into runtime private-network permission with isPrivateNetworkAccessAllowed; omitted keeps targets public-only. */
   allowPrivateNetwork?: () => boolean;
   /**
    * Skip the DNS resolved-address check (URL and redirect guards still apply).
@@ -60,6 +63,7 @@ export interface ProviderFetchOptions {
  */
 export function createProviderFetch(options: ProviderFetchOptions = {}): ProviderFetch {
   return createGuardedFetch({
+    network: options.network,
     dispatchAttempt: async (attempt, signal, transport, revalidate) => {
       try {
         return await dispatchProviderHttpAttempt(attempt, signal, transport, revalidate);
@@ -459,7 +463,8 @@ const blockedProxyRequestHeaders = new Set([
 const defaultProviderProxyMaxResponseBytes = 20 * 1024 * 1024;
 export const defaultProviderJsonMaxResponseBytes: number = 20 * 1024 * 1024;
 const defaultProviderErrorMaxResponseBytes = 64 * 1024;
-const defaultProviderRequestTimeoutMs = 30_000;
+/** Shared request budget for native AbortSignal and SDK timeout APIs. */
+export const defaultProviderRequestTimeoutMs = 30_000;
 
 export function createProviderProxyUrl(
   baseUrl: string,

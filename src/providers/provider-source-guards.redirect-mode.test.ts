@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { sourceScanTimeout } from "./provider-source-guards.support.ts";
 
 // Cloudflare Workers' fetch only implements `redirect: "follow"` and
 // `redirect: "manual"`; `redirect: "error"` throws `TypeError: Invalid redirect
@@ -39,7 +40,9 @@ function isCommentLine(line: string): boolean {
   return trimmed.startsWith("//") || trimmed.startsWith("*");
 }
 
-describe("provider redirect mode guard", () => {
+const sourceFiles = listSourceFiles(providersDir);
+
+describe("provider redirect mode guard", { timeout: sourceScanTimeout(sourceFiles.length) }, () => {
   it("recognizes the error redirect mode in its common spellings", () => {
     expect(errorRedirectMode.test('{ redirect: "error" }')).toBe(true);
     expect(errorRedirectMode.test("{ redirect: 'error' }")).toBe(true);
@@ -49,7 +52,7 @@ describe("provider redirect mode guard", () => {
   });
 
   it("keeps provider requests off the redirect mode Cloudflare Workers does not implement", () => {
-    const files = listSourceFiles(providersDir);
+    const files = sourceFiles;
     expect(files.length).toBeGreaterThanOrEqual(minimumScannedFiles);
 
     const offenders = files.flatMap((path) =>

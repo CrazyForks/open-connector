@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { sourceScanTimeout } from "./provider-source-guards.support.ts";
 
 /**
  * A generic runtime fact that already has one shared owner in this repository.
@@ -302,14 +303,20 @@ const cloneSpellings: CloneSpellings[] = [
   },
 ];
 
-const matchesById = scanCloneClasses();
-const currentCounts = countMatches(matchesById);
-if (process.env.SEED_CLONE_BASELINE === "1") {
-  writeBaseline(currentCounts);
-} else if (process.env.UPDATE_CLONE_BASELINE === "1") {
-  writeBaseline(ratchetBaseline(readBaseline(), currentCounts));
-}
-const baseline = readBaseline();
+const sourceFiles = providerSourceFiles(providersDir);
+let matchesById: Record<string, CloneMatch[]>;
+let currentCounts: CloneCounts;
+let baseline: CloneCounts;
+beforeAll(() => {
+  matchesById = scanCloneClasses();
+  currentCounts = countMatches(matchesById);
+  if (process.env.SEED_CLONE_BASELINE === "1") {
+    writeBaseline(currentCounts);
+  } else if (process.env.UPDATE_CLONE_BASELINE === "1") {
+    writeBaseline(ratchetBaseline(readBaseline(), currentCounts));
+  }
+  baseline = readBaseline();
+}, sourceScanTimeout(sourceFiles.length));
 
 describe("provider clone-class ratchet", () => {
   it("keeps every provider file at or below its committed clone count", () => {
@@ -477,7 +484,7 @@ function scanCloneClasses(): Record<string, CloneMatch[]> {
     matches[cloneClass.id] = [];
   }
 
-  for (const path of providerSourceFiles(providersDir)) {
+  for (const path of sourceFiles) {
     // The baseline keys are POSIX paths; `relative` returns backslashes on Windows.
     const file = relative(repositoryRoot, path).replaceAll("\\", "/");
     const text = readFileSync(path, "utf8");

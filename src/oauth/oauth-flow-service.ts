@@ -1,4 +1,5 @@
-import type { StoredConnection, ConnectionService } from "../connection-service.ts";
+import type { ConnectionService } from "../connection-service.ts";
+import type { StoredConnection } from "../connection-store.ts";
 import type { OAuth2AuthDefinition } from "../core/types.ts";
 import type { IProviderLoader } from "../providers/provider-loader.ts";
 import type { SaasOAuthService } from "../saas/saas-oauth-service.ts";
@@ -16,7 +17,8 @@ import type {
 import type { OAuthTokenResult } from "./oauth-token.ts";
 
 import { createHash, randomBytes } from "node:crypto";
-import { ConnectionError, normalizeConnectionName } from "../connection-service.ts";
+import { ConnectionError } from "../connection-error.ts";
+import { normalizeConnectionName } from "../connection-service.ts";
 import {
   providerFetch,
   ProviderDispatchRequestError,
