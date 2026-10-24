@@ -41,6 +41,20 @@ describe("Slack inbound event verification", () => {
     });
   });
 
+  it("accepts a signed form-urlencoded interaction callback without parsing it", async () => {
+    const body = "payload=%7B%22type%22%3A%22block_actions%22%7D";
+
+    await expect(
+      verify(body, {
+        contentType: "application/x-www-form-urlencoded; charset=utf-8",
+      }),
+    ).resolves.toEqual({
+      valid: true,
+      appId: "A0C8QRPSZ7Z",
+      challenge: null,
+    });
+  });
+
   it("rejects a signed event for another app", async () => {
     const body = JSON.stringify({ type: "event_callback", api_app_id: "AOTHER" });
 

@@ -14,6 +14,8 @@ export interface SlackEventVerificationInput {
   configuredAppId: string;
   /** Signing secret of the Slack application configured in this runtime. */
   signingSecret: string;
+  /** Request Content-Type. Form-urlencoded Slack interactions are verified without parsing. */
+  contentType?: string;
   /** Current time in milliseconds; injectable for tests. */
   now?: number;
 }
@@ -81,6 +83,12 @@ export async function verifySlackEventRequest(
   const reason = await verifySlackSignature({ ...input, now });
   if (reason) return { valid: false, reason };
 
+  // Slack interaction callbacks are form-urlencoded and do not contain api_app_id.
+  // The app-scoped signing secret already proves which application sent the request.
+  if (contentType(input.contentType) === "application/x-www-form-urlencoded") {
+    return { valid: true, appId: input.configuredAppId, challenge: null };
+  }
+
   // Only parse the body after its signature is trusted.
   let payload: unknown;
   try {
@@ -103,4 +111,8 @@ export async function verifySlackEventRequest(
     appId: input.configuredAppId,
     challenge: isChallenge ? (record.challenge as string) : null,
   };
+}
+
+function contentType(value: string | undefined): string {
+  return value?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
 }

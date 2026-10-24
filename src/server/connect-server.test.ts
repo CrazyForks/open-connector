@@ -277,6 +277,20 @@ describe("ConnectServer", () => {
       }
     });
 
+    it("accepts a signed form-urlencoded interaction callback", async () => {
+      const app = createTestServer([slackProvider], { eventVerifyToken: "verify-token" }).createApp();
+      await configure(app);
+      const body = "payload=%7B%22type%22%3A%22block_actions%22%7D";
+      const response = await verifyRequest(app, body, {
+        "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        success: true,
+        data: { valid: true, appId: "A123", challenge: null },
+      });
+    });
+
     it("returns a client error for a signed but malformed payload", async () => {
       const app = createTestServer([slackProvider], {
         eventVerifyToken: "verify-token",

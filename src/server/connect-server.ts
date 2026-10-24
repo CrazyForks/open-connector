@@ -199,6 +199,7 @@ export class ConnectServer {
         rawBody,
         configuredAppId: appId,
         signingSecret,
+        contentType: context.req.header("content-type") ?? "",
       });
       if (!result.valid) {
         switch (result.reason) {

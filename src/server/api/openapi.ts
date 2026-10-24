@@ -405,7 +405,21 @@ export function createOpenApiDocument(
         ],
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+          content: {
+            "application/json": { schema: { type: "object", additionalProperties: true } },
+            "application/x-www-form-urlencoded": {
+              schema: {
+                type: "object",
+                properties: {
+                  payload: {
+                    type: "string",
+                    description: "URL-encoded JSON block_actions interaction payload.",
+                  },
+                },
+                required: ["payload"],
+              },
+            },
+          },
         },
         responses: {
           200: jsonResponse(
