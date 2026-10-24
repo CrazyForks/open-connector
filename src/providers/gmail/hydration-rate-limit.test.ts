@@ -130,9 +130,13 @@ describe("Gmail fetch_emails hydration under per-user rate limits", () => {
     }
   });
 
-  it("waits the upstream Retry-After before retrying", async () => {
+  it.each([
+    { status: 429 as const, reason: "rateLimitExceeded" },
+    { status: 403 as const, reason: "userRateLimitExceeded" },
+    { status: 403 as const, reason: "rateLimitExceeded" },
+  ])("waits the upstream Retry-After before retrying ($status / $reason)", async ({ status, reason }) => {
     const mailbox = stubMailbox(3, (id, attempt) =>
-      id === "m1" && attempt === 1 ? rateLimited(429, "rateLimitExceeded", 7) : undefined,
+      id === "m1" && attempt === 1 ? rateLimited(status, reason, 7) : undefined,
     );
     const pending = gmailActionHandlers.fetch_emails({}, actionContext(mailbox.fetcher));
     let settled = false;
@@ -151,31 +155,45 @@ describe("Gmail fetch_emails hydration under per-user rate limits", () => {
     });
   });
 
-  it("fails as rate_limited with no partial page when the limit persists", async () => {
-    const mailbox = stubMailbox(12, (id) => (id === "m4" ? rateLimited(429, "rateLimitExceeded", 3) : undefined));
-    vi.stubGlobal("fetch", mailbox.fetcher);
+  it.each([
+    { status: 429 as const, reason: "rateLimitExceeded" },
+    { status: 403 as const, reason: "userRateLimitExceeded" },
+    { status: 403 as const, reason: "rateLimitExceeded" },
+  ])(
+    "fails as rate_limited with no partial page when the limit persists ($status / $reason)",
+    async ({ status, reason }) => {
+      const mailbox = stubMailbox(12, (id) => (id === "m4" ? rateLimited(status, reason, 3) : undefined));
+      vi.stubGlobal("fetch", mailbox.fetcher);
 
-    const { value: result } = await settle(executors["gmail.fetch_emails"]!({}, credentialContext));
+      const { value: result } = await settle(executors["gmail.fetch_emails"]!({}, credentialContext));
 
-    expect(result).toMatchObject({
-      ok: false,
-      error: { code: "rate_limited", details: { status: 429, details: { retryAfterSeconds: 3 } } },
-    });
-    expect(result).not.toHaveProperty("output");
-    // The attempt cap stops the retries: six tries for the limited message, one for each other.
-    expect(mailbox.getCalls.filter((call) => call === "m4")).toHaveLength(6);
-    expect(mailbox.getCalls).toHaveLength(11 + 6);
-  });
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: "rate_limited", details: { status, details: { retryAfterSeconds: 3 } } },
+      });
+      expect(result).not.toHaveProperty("output");
+      // The attempt cap stops the retries: six tries for the limited message, one for each other.
+      expect(mailbox.getCalls.filter((call) => call === "m4")).toHaveLength(6);
+      expect(mailbox.getCalls).toHaveLength(11 + 6);
+    },
+  );
 
-  it("stops retrying once the next wait would overrun the action's retry budget", async () => {
-    const mailbox = stubMailbox(2, (id) => (id === "m0" ? rateLimited(429, "rateLimitExceeded", 600) : undefined));
+  it.each([
+    { status: 429 as const, reason: "rateLimitExceeded" },
+    { status: 403 as const, reason: "userRateLimitExceeded" },
+    { status: 403 as const, reason: "rateLimitExceeded" },
+  ])(
+    "stops retrying once the next wait would overrun the action's retry budget ($status / $reason)",
+    async ({ status, reason }) => {
+      const mailbox = stubMailbox(2, (id) => (id === "m0" ? rateLimited(status, reason, 600) : undefined));
 
-    const { value, error } = await settle(gmailActionHandlers.fetch_emails({}, actionContext(mailbox.fetcher)));
+      const { value, error } = await settle(gmailActionHandlers.fetch_emails({}, actionContext(mailbox.fetcher)));
 
-    expect(value).toBeUndefined();
-    expect(error).toMatchObject({ status: 429, details: { retryAfterSeconds: 600 } });
-    expect(mailbox.getCalls.filter((call) => call === "m0")).toHaveLength(1);
-  });
+      expect(value).toBeUndefined();
+      expect(error).toMatchObject({ status, details: { retryAfterSeconds: 600 } });
+      expect(mailbox.getCalls.filter((call) => call === "m0")).toHaveLength(1);
+    },
+  );
 
   it.each([
     { name: "a server error", response: () => Response.json({ error: { message: "Backend" } }, { status: 500 }) },

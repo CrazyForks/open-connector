@@ -33,6 +33,7 @@ import {
   providerResponseError,
   readProviderErrorTextBody,
   readProviderJsonBody,
+  readRetryAfterSeconds,
   requiredInputString,
   requiredResponseRecord,
   runProviderRequest,
@@ -59,9 +60,8 @@ import { gmailMessageReceived } from "./trigger-on-message-received.ts";
 const service = "gmail";
 const gmailApiBaseUrl = "https://gmail.googleapis.com/gmail/v1";
 const detailHydrationBatchSize = 10;
-// Hydration fans out one `messages.get` (5 quota units) per listed id, and Gmail's per-user budget
-// is a moving average of 250 units/s (about 50 gets/s), so ten concurrent gets at typical latency
-// trip it. The retry below keeps hydrated rows and paces the rest instead of discarding the page.
+// Hydration fans out one detail request per listed id, which can exceed Gmail's per-user quota.
+// The retry below keeps hydrated rows and paces the rest instead of discarding the page.
 // Six attempts let the backoff climb 1, 2, 4, 8, 16 s (about 31 s of waiting per message at most),
 // long enough for the moving average to drain, without retrying one message forever.
 const hydrationMaxAttempts = 6;
@@ -1421,10 +1421,11 @@ async function readGmailError(response: Response): Promise<ProviderRequestError>
   const quotaExhausted = reasons.some((reason) => gmailExhaustedQuotaReasons.has(reason));
   const rateLimited =
     response.status === 403 && (quotaExhausted || reasons.some((reason) => gmailRateLimitReasons.has(reason)));
+  const retryAfterSeconds = rateLimited ? readRetryAfterSeconds(response.headers) : undefined;
   return new GmailRequestError(
     response.status,
     optionalString(error?.message) ?? `gmail request failed with ${response.status}`,
-    withRetryAfterSeconds(response),
+    retryAfterSeconds === undefined ? withRetryAfterSeconds(response) : { retryAfterSeconds },
     rateLimited ? "rate_limited" : undefined,
     quotaExhausted,
   );
