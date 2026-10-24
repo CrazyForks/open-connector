@@ -1401,6 +1401,28 @@ export async function readTransitFileInput(
 }
 
 /**
+ * The action error code a provider request failure reports: the provider's own
+ * code when it chose one, else one inferred from the upstream status. A
+ * provider that needs to react to the classification, such as retrying a rate
+ * limit, reads it here instead of re-deriving it from the status.
+ */
+export function providerRequestErrorCode(error: ProviderRequestError): ProviderErrorCode {
+  // `provider_error` is the generic fallback; a 429 is unambiguous, so refine it.
+  // A specific provider code (including one chosen for a 429) still wins.
+  return error.code === "provider_error" && error.status === 429
+    ? "rate_limited"
+    : (error.code ??
+        (error.status === 401 || error.status === 403
+          ? "authorization_failed"
+          : error.status === 429
+            ? "rate_limited"
+            : // A 3xx is an upstream redirect that `redirect: "manual"` surfaced unfollowed, not bad input.
+              error.status < 500 && (error.status < 300 || error.status >= 400)
+              ? "invalid_input"
+              : "provider_error"));
+}
+
+/**
  * Map provider runtime failures to the standard action execution result.
  */
 export function toProviderExecutionError(error: unknown, fallbackMessage: string): ExecutionResult {
@@ -1408,20 +1430,7 @@ export function toProviderExecutionError(error: unknown, fallbackMessage: string
     return {
       ok: false,
       error: {
-        code:
-          // `provider_error` is the generic fallback; a 429 is unambiguous, so refine it.
-          // A specific provider code (including one chosen for a 429) still wins.
-          error.code === "provider_error" && error.status === 429
-            ? "rate_limited"
-            : (error.code ??
-              (error.status === 401 || error.status === 403
-                ? "authorization_failed"
-                : error.status === 429
-                  ? "rate_limited"
-                  : // A 3xx is an upstream redirect that `redirect: "manual"` surfaced unfollowed, not bad input.
-                    error.status < 500 && (error.status < 300 || error.status >= 400)
-                    ? "invalid_input"
-                    : "provider_error")),
+        code: providerRequestErrorCode(error),
         message: error.message,
         details: {
           status: error.status,
