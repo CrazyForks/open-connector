@@ -1,16 +1,12 @@
 import type { CredentialValidators, ExecutionContext, ProviderExecutors } from "../../core/types.ts";
-import type { ProviderFetch, ProviderRuntimeHandler } from "../provider-runtime.ts";
+import type { ProviderRuntimeHandler } from "../provider-executors.ts";
+import type { ProviderFetch } from "../provider-runtime.ts";
 import type { TailscaleOperationDefinition } from "./operations.ts";
 
 import { optionalRecord, optionalString, requiredString } from "../../core/cast.ts";
-import {
-  defineProviderExecutors,
-  mapProviderActionHandlers,
-  ProviderRequestError,
-  readProviderJsonBody,
-  readProviderTextBody,
-  requireCustomCredential,
-} from "../provider-runtime.ts";
+import { requireCustomCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors, mapProviderActionHandlers } from "../provider-executors.ts";
+import { ProviderRequestError, readProviderJsonBody, readProviderTextBody } from "../provider-runtime.ts";
 import { tailscaleOperations } from "./operations.ts";
 
 const service = "tailscale";

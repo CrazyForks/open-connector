@@ -5,22 +5,24 @@ import type {
   ProviderProxyExecutor,
   ProxyExecutionResult,
 } from "../../core/types.ts";
-import type { ProviderActionHandlers } from "../provider-runtime.ts";
+import type { ProviderActionHandlers } from "../provider-executors.ts";
 
 import { optionalInteger, optionalRawString, optionalRecord, optionalString } from "../../core/cast.ts";
+import { requireCustomCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors } from "../provider-executors.ts";
 import {
-  createProviderFetch,
   createProviderProxyUrl,
-  providerUserAgent,
-  createProviderTimeout,
-  defineProviderExecutors,
   normalizeProviderProxyHeaders,
-  ProviderRequestError,
   readProviderProxyErrorMessage,
   readProviderProxyResponse,
-  readProviderTextBody,
-  requireCustomCredential,
   toProviderProxyError,
+} from "../provider-proxy.ts";
+import {
+  createProviderFetch,
+  providerUserAgent,
+  createProviderTimeout,
+  ProviderRequestError,
+  readProviderTextBody,
   providerInputError,
   providerResponseError,
 } from "../provider-runtime.ts";

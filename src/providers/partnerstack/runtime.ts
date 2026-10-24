@@ -1,5 +1,5 @@
 import type { CredentialValidationResult, ProviderExecutors } from "../../core/types.ts";
-import type { ProviderActionHandlers } from "../provider-runtime.ts";
+import type { ProviderActionHandlers } from "../provider-executors.ts";
 
 import { Buffer } from "node:buffer";
 import {
@@ -11,13 +11,13 @@ import {
   optionalString,
   requiredString,
 } from "../../core/cast.ts";
+import { requireApiKeyCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors } from "../provider-executors.ts";
 import {
-  defineProviderExecutors,
   providerInputError,
   ProviderRequestError,
   providerResponseError,
   providerUserAgent,
-  requireApiKeyCredential,
 } from "../provider-runtime.ts";
 
 export const partnerstackApiBaseUrl = "https://api.partnerstack.com/api";

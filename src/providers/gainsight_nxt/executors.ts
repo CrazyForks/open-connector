@@ -4,20 +4,20 @@ import type {
   ProviderExecutors,
   ProviderProxyExecutor,
 } from "../../core/types.ts";
-import type { ProviderActionHandlers } from "../provider-runtime.ts";
+import type { ProviderActionHandlers } from "../provider-executors.ts";
 
 import { compactObject, optionalInteger, optionalRecord, optionalString, rawStringOrNull } from "../../core/cast.ts";
 import { assertPublicHttpUrl } from "../../core/request.ts";
+import { requireApiKeyCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors } from "../provider-executors.ts";
+import { defineProviderProxy } from "../provider-proxy.ts";
 import {
   createProviderTimeout,
-  defineProviderExecutors,
-  defineProviderProxy,
   isAbortLikeError,
   providerInputError,
   providerUserAgent,
   ProviderRequestError,
   readProviderTextBody,
-  requireApiKeyCredential,
   providerResponseError,
 } from "../provider-runtime.ts";
 

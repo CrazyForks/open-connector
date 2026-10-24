@@ -4,23 +4,25 @@ import type {
   ProviderExecutors,
   ProviderProxyExecutor,
 } from "../../core/types.ts";
-import type { ProviderActionHandlers } from "../provider-runtime.ts";
+import type { ProviderActionHandlers } from "../provider-executors.ts";
 
 import { compactObject, optionalRecord, optionalString } from "../../core/cast.ts";
+import { requireCustomCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors } from "../provider-executors.ts";
 import {
-  createProviderFetch,
   createProviderProxyUrl,
-  createProviderTimeout,
-  defineProviderExecutors,
-  isAbortLikeError,
   normalizeProviderProxyHeaders,
-  ProviderRequestError,
-  providerUserAgent,
   readProviderProxyErrorMessage,
   readProviderProxyResponse,
-  requireCustomCredential,
-  requiredInputString,
   toProviderProxyError,
+} from "../provider-proxy.ts";
+import {
+  createProviderFetch,
+  createProviderTimeout,
+  isAbortLikeError,
+  ProviderRequestError,
+  providerUserAgent,
+  requiredInputString,
 } from "../provider-runtime.ts";
 
 const service = "stack_ai";

@@ -1,3 +1,4 @@
+import type { CatalogStore } from "../../catalog-store.ts";
 import type { IConnectionStore, StoredConnection } from "../../connection-store.ts";
 import type { ActionDefinition, ActionExecutor, ProviderDefinition, ResolvedCredential } from "../../core/types.ts";
 import type { IProviderLoader } from "../../providers/provider-loader.ts";
@@ -8,6 +9,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCatalogStore } from "../../catalog-store.ts";
 import { ConnectionService } from "../../connection-service.ts";
 import { ActionPolicyService } from "../../core/action-policy.ts";
+import { ExecutionError } from "../../core/execution-error.ts";
+import { serializeRuntimeActionResult } from "../api/runtime-api.ts";
 import { ActionRunner } from "./action-runner.ts";
 
 const echoAction: ActionDefinition = {
@@ -49,6 +52,75 @@ afterEach(() => {
 });
 
 describe("ActionRunner", () => {
+  it.each([
+    ["unsupported", 501],
+    ["timeout", 504],
+    ["too_large", 413],
+  ] as const)("preserves the %s failure category through HTTP serialization", async (kind, status) => {
+    const runner = createRunner({
+      runs: new MemoryRunLogStore(),
+      logger: createTestLogger().logger,
+      providerLoader: new TestProviderLoader(async () => {
+        throw new ExecutionError("custom_failure", "Failed.", kind);
+      }),
+    });
+    const run = await runner.run({ actionId: echoAction.id, input: {}, caller: "http", policy: openPolicy });
+    if (!run) throw new Error("Expected a run");
+    expect(run.failureKind).toBe(kind);
+    expect(serializeRuntimeActionResult({ ...run, actionId: echoAction.id }).status).toBe(status);
+  });
+
+  it.each(["missing", "unreadable"])("handles a %s action definition without invoking the executor", async (state) => {
+    const catalog = createCatalogStore([exampleProvider], { executableActionIds: [echoAction.id] });
+    vi.spyOn(catalog, "getAction").mockImplementation(async () => {
+      if (state === "unreadable") throw new Error("private catalog file path");
+      return undefined;
+    });
+    const execute = vi.fn(async () => ({ ok: true }));
+    const runs = new MemoryRunLogStore();
+    const runner = createRunner({
+      catalog,
+      runs,
+      logger: createTestLogger().logger,
+      providerLoader: new TestProviderLoader(execute),
+    });
+    const run = await runner.run({ actionId: echoAction.id, input: {}, caller: "http", policy: openPolicy });
+    expect(run?.result.error?.code).toBe(state === "missing" ? "unknown_action" : "internal_error");
+    expect(JSON.stringify(run)).not.toContain("private catalog file path");
+    expect(execute).not.toHaveBeenCalled();
+    expect(runs.items).toHaveLength(1);
+  });
+
+  it("does not invoke the executor when cancelled during schema loading", async () => {
+    const catalog = createCatalogStore([exampleProvider], { executableActionIds: [echoAction.id] });
+    const controller = new AbortController();
+    const read = catalog.getAction.bind(catalog);
+    vi.spyOn(catalog, "getAction").mockImplementation(async (id) => {
+      const action = await read(id);
+      controller.abort();
+      return action;
+    });
+    const execute = vi.fn(async () => ({ ok: true, output: {} }));
+    const providerLoader = new TestProviderLoader(execute);
+    const runs = new MemoryRunLogStore();
+    const runner = new ActionRunner({
+      catalog,
+      providerLoader,
+      runs,
+      connections: new ConnectionService({ catalog, providerLoader, store: new MemoryConnectionStore() }),
+    });
+    const result = await runner.run({
+      actionId: echoAction.id,
+      input: {},
+      caller: "http",
+      policy: openPolicy,
+      signal: controller.signal,
+    });
+    expect(result?.result.error?.code).toBe("execution_cancelled");
+    expect(execute).not.toHaveBeenCalled();
+    expect(runs.items[0]?.errorCode).toBe("execution_cancelled");
+  });
+
   it("uses one execution id across logs, storage, and the result", async () => {
     const runs = new MemoryRunLogStore();
     const { entries, logger } = createTestLogger();
@@ -187,7 +259,7 @@ describe("ActionRunner", () => {
     const runs = new MemoryRunLogStore();
     const providerLoader = new TestProviderLoader(async () => ({ ok: true, output: {} }));
     const loadExecutor = vi.spyOn(providerLoader, "loadActionExecutor");
-    const resolveConnection = vi.spyOn(ConnectionService.prototype, "resolveForExecution");
+    const resolveConnection = vi.spyOn(ConnectionService.prototype, "resolveConnection");
     const controller = new AbortController();
     controller.abort();
     const runner = createRunner({ runs, logger: createTestLogger().logger, providerLoader });
@@ -220,7 +292,7 @@ describe("ActionRunner", () => {
         await lookupPending;
         return undefined;
       });
-    const resolveConnection = vi.spyOn(ConnectionService.prototype, "resolveForExecution");
+    const resolveConnection = vi.spyOn(ConnectionService.prototype, "resolveConnection");
     const controller = new AbortController();
     const runner = createRunner({ runs, logger: createTestLogger().logger, providerLoader });
 
@@ -263,7 +335,7 @@ describe("ActionRunner", () => {
     const { logger } = createTestLogger();
     const providerLoader = new TestProviderLoader(async () => ({ ok: true, output: {} }));
     const loadExecutor = vi.spyOn(providerLoader, "loadActionExecutor");
-    const resolveConnection = vi.spyOn(ConnectionService.prototype, "resolveForExecution");
+    const resolveConnection = vi.spyOn(ConnectionService.prototype, "resolveConnection");
     const actionPolicy = new ActionPolicyService({ blockedActions: ["example.echo"] });
     const runner = createRunner({ runs, logger, providerLoader });
 
@@ -294,7 +366,7 @@ describe("ActionRunner", () => {
     const runs = new MemoryRunLogStore();
     const providerLoader = new TestProviderLoader(async () => ({ ok: true, output: {} }));
     const loadExecutor = vi.spyOn(providerLoader, "loadActionExecutor");
-    const resolveConnection = vi.spyOn(ConnectionService.prototype, "resolveForExecution");
+    const resolveConnection = vi.spyOn(ConnectionService.prototype, "resolveConnection");
     const actionPolicy = new ActionPolicyService();
     const policy = actionPolicy.createSnapshot(undefined, {
       allowedActions: [],
@@ -332,7 +404,7 @@ describe("ActionRunner", () => {
 
   it("uses stable IDs for credential connections on a provider that also supports no-auth", async () => {
     const runs = new MemoryRunLogStore();
-    const resolveConnection = vi.spyOn(ConnectionService.prototype, "resolveForExecution");
+    const resolveConnection = vi.spyOn(ConnectionService.prototype, "resolveConnection");
     const actionPolicy = new ActionPolicyService();
     const store = new MemoryConnectionStore();
     const connection = await store.set("example", "work", credential);
@@ -388,13 +460,16 @@ describe("ActionRunner", () => {
 });
 
 function createRunner(options: {
+  catalog?: CatalogStore;
   runs: IRunLogStore;
   logger: Logger;
   providerLoader?: IProviderLoader;
   provider?: ProviderDefinition;
   store?: IConnectionStore;
 }): ActionRunner {
-  const catalog = createCatalogStore([options.provider ?? exampleProvider], { executableActionIds: [echoAction.id] });
+  const catalog =
+    options.catalog ??
+    createCatalogStore([options.provider ?? exampleProvider], { executableActionIds: [echoAction.id] });
   const providerLoader =
     options.providerLoader ?? new TestProviderLoader(async () => ({ ok: true, output: { message: "ok" } }));
   return new ActionRunner({

@@ -8,7 +8,7 @@ import type {
 import type { IntegrationDefinition } from "../../triggers/common/integration.ts";
 import type { PollDefinition } from "../../triggers/common/poll.ts";
 import type { FeishuActionRuntimeContext } from "../feishu/shared/client.ts";
-import type { ProviderActionHandlerSubset } from "../provider-runtime.ts";
+import type { ProviderActionHandlerSubset } from "../provider-executors.ts";
 
 import { Buffer } from "node:buffer";
 import { compactObject, optionalBoolean, optionalRecord, optionalString } from "../../core/cast.ts";
@@ -37,20 +37,20 @@ import { createFeishuTaskActionHandlers } from "../feishu/shared/task-runtime.ts
 import { createFeishuVcActionHandlers } from "../feishu/shared/vc-runtime.ts";
 import { createFeishuWhiteboardActionHandlers } from "../feishu/shared/whiteboard-runtime.ts";
 import { createFeishuWikiActionHandlers } from "../feishu/shared/wiki-runtime.ts";
+import { requireCustomCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors, getProviderActionHandler, mapProviderActionHandlers } from "../provider-executors.ts";
 import {
   createProviderProxyUrl,
-  defineProviderExecutors,
-  getProviderActionHandler,
-  mapProviderActionHandlers,
   normalizeProviderProxyHeaders,
+  readProviderProxyErrorMessage,
+  readProviderProxyResponse,
+  toProviderProxyError,
+} from "../provider-proxy.ts";
+import {
   providerFetch,
   ProviderRequestError,
   providerUserAgent,
-  readProviderProxyErrorMessage,
-  readProviderProxyResponse,
-  requireCustomCredential,
   requiredInputString,
-  toProviderProxyError,
   defaultProviderRequestTimeoutMs,
 } from "../provider-runtime.ts";
 import { feishuAppBotActions, feishuAppBotProviderScopes } from "./actions.ts";

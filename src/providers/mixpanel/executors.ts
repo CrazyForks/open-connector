@@ -4,7 +4,7 @@ import type {
   ProviderExecutors,
   ProviderProxyExecutor,
 } from "../../core/types.ts";
-import type { ProviderActionHandlers } from "../provider-runtime.ts";
+import type { ProviderActionHandlers } from "../provider-executors.ts";
 
 import { Buffer } from "node:buffer";
 import {
@@ -14,19 +14,21 @@ import {
   optionalScalarString,
   optionalString,
 } from "../../core/cast.ts";
+import { requireApiKeyCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors } from "../provider-executors.ts";
 import {
   createProviderProxyUrl,
-  createProviderTimeout,
-  defineProviderExecutors,
-  isAbortLikeError,
   normalizeProviderProxyHeaders,
+  readProviderProxyErrorMessage,
+  readProviderProxyResponse,
+  toProviderProxyError,
+} from "../provider-proxy.ts";
+import {
+  createProviderTimeout,
+  isAbortLikeError,
   providerFetch,
   ProviderRequestError,
   providerUserAgent,
-  readProviderProxyErrorMessage,
-  readProviderProxyResponse,
-  requireApiKeyCredential,
-  toProviderProxyError,
   providerInputError,
 } from "../provider-runtime.ts";
 

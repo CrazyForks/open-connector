@@ -14,13 +14,13 @@ import {
   optionalString,
   requiredString,
 } from "../../core/cast.ts";
+import { requireApiKeyCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors } from "../provider-executors.ts";
+import { defineProviderProxy } from "../provider-proxy.ts";
 import {
-  defineProviderExecutors,
-  defineProviderProxy,
   providerResponseError,
   providerUserAgent,
   ProviderRequestError,
-  requireApiKeyCredential,
   requiredResponseRecord,
 } from "../provider-runtime.ts";
 

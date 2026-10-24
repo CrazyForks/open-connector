@@ -1,5 +1,5 @@
 import type { CredentialValidators, ExecutionContext, ProviderExecutors } from "../../core/types.ts";
-import type { ProviderActionHandlers } from "../provider-runtime.ts";
+import type { ProviderActionHandlers } from "../provider-executors.ts";
 
 import { SignJWT } from "jose";
 import {
@@ -14,16 +14,16 @@ import {
   requiredString,
 } from "../../core/cast.ts";
 import { assertPublicHttpUrl, encodePathSegment, jsonObject } from "../../core/request.ts";
+import { requireCustomCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors } from "../provider-executors.ts";
 import {
   createProviderTimeout,
-  defineProviderExecutors,
   isAbortSignalError,
   providerInputError,
   ProviderRequestError,
   providerUserAgent,
   readProviderJsonBody,
   readProviderTextBody,
-  requireCustomCredential,
 } from "../provider-runtime.ts";
 
 const service = "mymind";

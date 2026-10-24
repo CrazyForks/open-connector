@@ -6,17 +6,17 @@ import type {
 } from "../../core/types.ts";
 import type { IntegrationDefinition } from "../../triggers/common/integration.ts";
 import type { PollDefinition } from "../../triggers/common/poll.ts";
-import type { ProviderActionHandlers } from "../provider-runtime.ts";
-import type { ApiKeyProviderContext } from "../provider-runtime.ts";
+import type { ProviderActionHandlers } from "../provider-executors.ts";
+import type { ApiKeyProviderContext } from "../provider-executors.ts";
 
 import { optionalBoolean, optionalNumber, optionalRecord, optionalString } from "../../core/cast.ts";
 import { assertPublicHttpUrl } from "../../core/request.ts";
+import { requireApiKeyCredential } from "../provider-credentials.ts";
+import { defineApiKeyProviderExecutors } from "../provider-executors.ts";
+import { defineProviderProxy } from "../provider-proxy.ts";
 import {
-  defineApiKeyProviderExecutors,
-  defineProviderProxy,
   isAbortLikeError,
   ProviderRequestError,
-  requireApiKeyCredential,
   providerInputError,
   defaultProviderRequestTimeoutMs,
 } from "../provider-runtime.ts";

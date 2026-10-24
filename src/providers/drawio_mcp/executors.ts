@@ -2,7 +2,9 @@ import type { CredentialValidators, ExecutionContext, ProviderExecutors } from "
 import type { ProviderFetch } from "../provider-runtime.ts";
 
 import { isPrivateNetworkAccessAllowed } from "../../core/request.ts";
-import { createProviderFetch, defineProviderExecutors, requireCustomCredential } from "../provider-runtime.ts";
+import { requireCustomCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors } from "../provider-executors.ts";
+import { createProviderFetch } from "../provider-runtime.ts";
 import { createDrawioMcpContext, drawioMcpActionHandlers, validateDrawioMcpCredential } from "./runtime.ts";
 
 const service = "drawio_mcp";

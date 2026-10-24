@@ -7,15 +7,14 @@ import type {
 
 import { createHash } from "node:crypto";
 import { optionalNumber, optionalRecord, optionalString, requiredRecord, requiredString } from "../../core/cast.ts";
+import { requireCustomCredential } from "../provider-credentials.ts";
+import { defineProviderExecutors, mapProviderActionHandlers } from "../provider-executors.ts";
+import { defineProviderProxy } from "../provider-proxy.ts";
 import {
-  defineProviderExecutors,
-  defineProviderProxy,
-  mapProviderActionHandlers,
   providerInputError,
   providerResponseError,
   ProviderRequestError,
   readProviderJsonBody,
-  requireCustomCredential,
 } from "../provider-runtime.ts";
 import { panjivaActionSpecs } from "./actions.ts";
 const service = "panjiva",
