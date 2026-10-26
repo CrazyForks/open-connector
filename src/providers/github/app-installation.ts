@@ -1,7 +1,12 @@
 import { importPKCS8, SignJWT } from "jose";
 import { sha256Hex } from "../../core/aws-sigv4.ts";
 import { base64Bytes, optionalRecord, optionalString, stringRecord } from "../../core/cast.ts";
-import { ProviderRequestError, requiredInputString, runProviderRequest } from "../provider-runtime.ts";
+import {
+  providerInputError,
+  ProviderRequestError,
+  requiredInputString,
+  runProviderRequest,
+} from "../provider-runtime.ts";
 import { githubRequestJson } from "./runtime-shared.ts";
 
 /**
@@ -46,6 +51,8 @@ interface GitHubInstallationToken {
 
 interface GitHubAppInstallation {
   id: number;
+  /** Numeric App ID the installation belongs to. */
+  app_id?: number;
   account: Record<string, unknown>;
   permissions: Record<string, string>;
   repository_selection: string;
@@ -54,8 +61,11 @@ interface GitHubAppInstallation {
 
 export function readGitHubAppInstallationCredential(values: Record<string, string>): GitHubAppInstallationCredential {
   const appId = requiredInputString(values.appId, "appId").trim();
-  if (!/^\d+$/u.test(appId)) {
-    throw new ProviderRequestError(400, "appId must be the numeric App ID shown on the GitHub App's settings page");
+  // Legacy client IDs use an Iv1. prefix.
+  if (!/^[A-Za-z0-9.]+$/u.test(appId)) {
+    throw providerInputError(
+      "appId must be the GitHub App's numeric App ID or its client ID, both shown on the App's settings page",
+    );
   }
   const installationId = requiredInputString(values.installationId, "installationId").trim();
   if (!/^\d+$/u.test(installationId)) {

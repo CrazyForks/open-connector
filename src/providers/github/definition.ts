@@ -94,12 +94,13 @@ export const provider: ProviderDefinition = {
       fields: [
         {
           key: "appId",
-          label: "App ID",
+          label: "App ID or client ID",
           inputType: "text",
           required: true,
           secret: false,
           placeholder: "1234567",
-          description: "The numeric App ID shown on the GitHub App's settings page under About.",
+          description:
+            "The GitHub App's client ID (recommended) or its numeric App ID, both shown on the App's settings page. GitHub Enterprise Server releases that predate client ID issuers accept only the numeric App ID.",
         },
         {
           key: "installationId",

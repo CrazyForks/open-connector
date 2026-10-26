@@ -72,12 +72,14 @@ describe("GitHub App private keys", () => {
     );
   });
 
-  it("requires numeric App and installation ids", async () => {
+  it("rejects invalid App identifiers and nonnumeric installation IDs", async () => {
     const key = await createTestKey();
 
-    expect(() =>
-      readGitHubAppInstallationCredential({ appId: "my-app", installationId, privateKey: key.pkcs1 }),
-    ).toThrow(/appId must be the numeric App ID/u);
+    for (const invalid of ["my app", "https://x", "my-app"]) {
+      expect(() =>
+        readGitHubAppInstallationCredential({ appId: invalid, installationId, privateKey: key.pkcs1 }),
+      ).toThrow(/appId must be the GitHub App's numeric App ID or its client ID/u);
+    }
     expect(() =>
       readGitHubAppInstallationCredential({ appId, installationId: "bakey", privateKey: key.pkcs1 }),
     ).toThrow(/installationId must be the numeric installation id/u);
@@ -85,19 +87,22 @@ describe("GitHub App private keys", () => {
 });
 
 describe("GitHub App JWT", () => {
-  it("signs an RS256 token issued by the App id and valid for nine minutes", async () => {
-    const key = await createTestKey();
-    const credential = readGitHubAppInstallationCredential({ appId, installationId, privateKey: key.pkcs1 });
+  it.each([appId, "Iv23liYP08qB9Y6Bk9HV", "Iv1.pgyb7nOiAvasoAZL"])(
+    "signs an RS256 token issued by %s and valid for nine minutes",
+    async (appId) => {
+      const key = await createTestKey();
+      const credential = readGitHubAppInstallationCredential({ appId, installationId, privateKey: key.pkcs1 });
 
-    const token = await signGitHubAppJwt(credential);
+      const token = await signGitHubAppJwt(credential);
 
-    const { payload, protectedHeader } = await jwtVerify(token, key.publicKey);
-    expect(protectedHeader).toMatchObject({ alg: "RS256", typ: "JWT" });
-    expect(payload.iss).toBe(appId);
-    // GitHub refuses a JWT older than ten minutes and one issued in the future.
-    expect((payload.exp as number) - (payload.iat as number)).toBe(540);
-    expect(payload.iat as number).toBeLessThan(Math.floor(Date.now() / 1000));
-  });
+      const { payload, protectedHeader } = await jwtVerify(token, key.publicKey);
+      expect(protectedHeader).toMatchObject({ alg: "RS256", typ: "JWT" });
+      expect(payload.iss).toBe(appId);
+      // GitHub refuses a JWT older than ten minutes and one issued in the future.
+      expect((payload.exp as number) - (payload.iat as number)).toBe(540);
+      expect(payload.iat as number).toBeLessThan(Math.floor(Date.now() / 1000));
+    },
+  );
 
   it("reports a key that is PEM but not RSA as a credential error", async () => {
     const { privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });

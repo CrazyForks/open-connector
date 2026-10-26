@@ -8,6 +8,7 @@ import type { IntegrationDefinition } from "../../triggers/common/integration.ts
 import type { PollDefinition } from "../../triggers/common/poll.ts";
 import type { GitHubActionContext, GitHubActionHandler } from "./runtime-shared.ts";
 
+import { optionalInteger } from "../../core/cast.ts";
 import { requireBearerCredential } from "../provider-credentials.ts";
 import { combineProviderActionHandlers, defineProviderExecutors } from "../provider-executors.ts";
 import { defineProviderProxy } from "../provider-proxy.ts";
@@ -173,7 +174,8 @@ async function validateGitHubAppInstallation(
       grantedScopes: Object.entries(minted.permissions).map(([permission, level]) => `${permission}:${level}`),
     },
     metadata: {
-      appId: credential.appId,
+      // The numeric App ID GitHub reports, whichever identifier the user typed.
+      appId: String(optionalInteger(installation.app_id) ?? credential.appId),
       installationId: credential.installationId,
       accountType: accountType ?? null,
       repositorySelection: minted.repositorySelection ?? installation.repository_selection ?? null,

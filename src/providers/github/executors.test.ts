@@ -273,6 +273,20 @@ describe("GitHub App installation validation", () => {
     expect(isAppJwt(requests[0]!.headers.get("authorization"))).toBe(true);
   });
 
+  it("reports the numeric App ID when the credential holds a client ID", async () => {
+    stubFetch([
+      () => Response.json({ id: Number(installationId), app_id: 5360099, account: { login: "bakey" } }),
+      () => mintResponse(),
+    ]);
+
+    const result = await credentialValidators.customCredential!(
+      { values: { appId: "Iv23liA1b2C3d4E5f6G7", installationId, privateKey } },
+      { fetcher: fetch },
+    );
+
+    expect(result).toMatchObject({ metadata: { appId: "5360099" } });
+  });
+
   it.each(["describe", "mint"])("cancels credential validation during %s", async (stage) => {
     const controller = new AbortController();
     const fetcher = vi.fn<typeof fetch>((_url, init) => {
