@@ -8,8 +8,12 @@ import { defineApiKeyProviderExecutors } from "../provider-executors.ts";
 import { defineProviderProxy } from "../provider-proxy.ts";
 import { requiredResponseRecord } from "../provider-runtime.ts";
 import { providerInputError, ProviderRequestError, runProviderRequest } from "../provider-runtime.ts";
+import { dataForSeoReferencePaths } from "./dataforseo-reference-actions.ts";
+import { dataForSeoResearchContracts } from "./dataforseo-research-actions.ts";
 import { aisaFirecrawlFamilies } from "./firecrawl-actions.ts";
+
 const service = "aisa";
+
 const aisaApiOrigin = "https://api.aisa.one";
 interface AisaActionRoute {
   path: string;
@@ -29,16 +33,20 @@ interface AisaActionRoute {
   timeoutMs?: number;
   asyncJob?: "submit" | "get" | "cancel";
 }
+
 interface AisaSemicolonResponse {
   type: "semicolon";
   header: "required" | "optional";
   columns?: readonly string[];
   headerAliases?: readonly (readonly string[])[];
 }
+
 type AisaResponseFormat = AisaSemicolonResponse;
+
 function dataForSeoRoute(path: string, body: Record<string, string>): AisaActionRoute {
   return { path, method: "POST", query: {}, body, bodyArray: true, snakeCaseBody: true };
 }
+
 function dataForSeoLlmRoute(path: string): AisaActionRoute {
   return dataForSeoRoute(path, {
     prompt: "userPrompt",
@@ -56,6 +64,7 @@ function dataForSeoLlmRoute(path: string): AisaActionRoute {
     tag: "tag",
   });
 }
+
 function dataForSeoMentionRoute(path: string): AisaActionRoute {
   return dataForSeoRoute(path, {
     targets: "target",
@@ -69,6 +78,7 @@ function dataForSeoMentionRoute(path: string): AisaActionRoute {
     tag: "tag",
   });
 }
+
 const similarwebMonthQuery = {
   startMonth: "start_date",
   endMonth: "end_date",
@@ -76,6 +86,7 @@ const similarwebMonthQuery = {
   webSource: "web_source",
   mainDomainOnly: "main_domain_only",
 };
+
 const similarwebRowsQuery = {
   domain: "domain",
   ...similarwebMonthQuery,
@@ -83,7 +94,61 @@ const similarwebRowsQuery = {
   offset: "offset",
   trafficSource: "traffic_source",
 };
+
 const aisaActionRoutes: Record<string, AisaActionRoute> = {
+  search_firecrawl: {
+    path: "/apis/v1/firecrawl/search",
+    method: "POST",
+    query: {},
+    body: { query: "query", limit: "limit" },
+    bodyDefaults: { enterprise: false, sources: ["web"] },
+  },
+  search_akta_companies: { path: "/apis/v1/akta/company/search", query: { query: "query" } },
+  enrich_akta_company: {
+    path: "/apis/v1/akta/company/enrichment",
+    query: { company: "company", sections: "sections" },
+  },
+  search_akta_industries: {
+    path: "/apis/v1/akta/industry/search",
+    query: { query: "query", level: "level" },
+  },
+  search_akta_company_list: {
+    path: "/apis/v1/akta/list/generate/companies",
+    method: "POST",
+    query: {},
+    body: {
+      query: "query",
+      filters: "filters",
+      sections: "sections",
+      limit: "limit",
+      offset: "offset",
+      sortBy: "sort_by",
+      sortOrder: "sort_order",
+    },
+  },
+  get_dataforseo_reference_data: { path: "/apis/v1/dataforseo", query: {} },
+  get_ahrefs_domain_rating: {
+    path: "/apis/v1/ahrefs/site-explorer/domain-rating",
+    query: { target: "target", date: "date" },
+  },
+  get_ahrefs_site_metrics: {
+    path: "/apis/v1/ahrefs/site-explorer/metrics",
+    query: { target: "target", date: "date" },
+  },
+  ...Object.fromEntries(
+    dataForSeoResearchContracts.map((contract) => [
+      contract.name,
+      {
+        path: contract.path,
+        method: "POST" as const,
+        query: {},
+        bodyArray: true,
+        body: Object.fromEntries(
+          Object.keys(contract.inputSchema.properties).map((key) => [key, camelToSnakeCase(key)]),
+        ),
+      },
+    ]),
+  ),
   ...Object.fromEntries(
     aisaFirecrawlFamilies.flatMap((family) => {
       const base = `/apis/v1/firecrawl/${family.path}`;
@@ -973,6 +1038,7 @@ const aisaActionRoutes: Record<string, AisaActionRoute> = {
     },
   },
 };
+
 function buildAisaPath(path: string, input: Record<string, unknown>, pathParams: Record<string, string> | undefined) {
   let resolved = path;
   for (const [placeholder, inputName] of Object.entries(pathParams ?? {})) {
@@ -984,6 +1050,7 @@ function buildAisaPath(path: string, input: Record<string, unknown>, pathParams:
   }
   return resolved;
 }
+
 function buildAisaBody(input: Record<string, unknown>, route: AisaActionRoute) {
   if (!route.body) {
     return undefined;
@@ -999,6 +1066,7 @@ function buildAisaBody(input: Record<string, unknown>, route: AisaActionRoute) {
   const normalized = route.snakeCaseBody ? toSnakeCaseJson(body, route.bodyKeyAliases) : body;
   return route.bodyArray ? [normalized] : normalized;
 }
+
 function toSnakeCaseJson(value: unknown, keyAliases: Record<string, string> = {}): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => toSnakeCaseJson(item, keyAliases));
@@ -1014,6 +1082,7 @@ function toSnakeCaseJson(value: unknown, keyAliases: Record<string, string> = {}
     ]),
   );
 }
+
 function camelToSnakeCase(value: string) {
   let output = "";
   for (const character of value) {
@@ -1022,6 +1091,7 @@ function camelToSnakeCase(value: string) {
   }
   return output;
 }
+
 function buildAisaQuery(
   input: Record<string, unknown>,
   mapping: Record<string, string | readonly string[]>,
@@ -1067,7 +1137,9 @@ function buildAisaQuery(
   }
   return query;
 }
+
 type Handler = (input: Record<string, unknown>, context: ApiKeyProviderContext) => Promise<unknown>;
+
 const handlers: Record<string, Handler> = Object.fromEntries(
   Object.entries(aisaActionRoutes).map(([name, route]) => [
     name,
@@ -1080,7 +1152,13 @@ const handlers: Record<string, Handler> = Object.fromEntries(
         if (maxPriceUsd !== undefined) headers["X-AISA-Max-Price-USD"] = maxPriceUsd;
       }
       const payload = await requestAisa(
-        buildAisaPath(route.path, normalized, route.pathParams),
+        buildAisaPath(
+          name === "get_dataforseo_reference_data"
+            ? `${route.path}/${dataForSeoReferencePaths[String(normalized.resource)]}`
+            : route.path,
+          normalized,
+          route.pathParams,
+        ),
         buildAisaQuery(
           normalized,
           route.query,
@@ -1110,9 +1188,11 @@ const handlers: Record<string, Handler> = Object.fromEntries(
     },
   ]),
 );
+
 export const executors: ProviderExecutors = defineApiKeyProviderExecutors(service, handlers, {
   skipDnsValidation: true,
 });
+
 export const proxy: ProviderProxyExecutor = defineProviderProxy({
   service,
   baseUrl: aisaApiOrigin,
@@ -1122,6 +1202,7 @@ export const proxy: ProviderProxyExecutor = defineProviderProxy({
   },
   skipDnsValidation: true,
 });
+
 export const credentialValidators: CredentialValidators = {
   async apiKey(input, { fetcher, signal }) {
     const payload = optionalRecord(
@@ -1142,6 +1223,7 @@ export const credentialValidators: CredentialValidators = {
     };
   },
 };
+
 async function requestAisa(
   path: string,
   query: URLSearchParams,
@@ -1173,6 +1255,7 @@ async function requestAisa(
     return payload;
   });
 }
+
 async function readAisaPayload(response: Response, responseFormat: AisaResponseFormat | undefined) {
   const text = await response.text();
   if (text.trim() === "") {
@@ -1190,6 +1273,7 @@ async function readAisaPayload(response: Response, responseFormat: AisaResponseF
     throw new ProviderRequestError(502, "AIsa returned invalid JSON");
   }
 }
+
 function createSemicolonOutput(rawText: string, responseFormat: AisaSemicolonResponse) {
   const records = isEmptySemrushReport(rawText) ? [] : parseSemicolonRecords(rawText);
   const columns = responseFormat.header === "required" ? (records.shift() ?? []) : [...(responseFormat.columns ?? [])];
@@ -1203,6 +1287,7 @@ function createSemicolonOutput(rawText: string, responseFormat: AisaSemicolonRes
   }
   return { rawText, columns, rows: records };
 }
+
 function isEmptySemrushReport(rawText: string): boolean {
   const message = rawText.trim();
   if (!message.startsWith("ERROR ")) {
@@ -1215,12 +1300,14 @@ function isEmptySemrushReport(rawText: string): boolean {
   const detail = separatorIndex === -1 ? message : message.slice(separatorIndex + 4).trim();
   throw new ProviderRequestError(502, code ? `Semrush error ${code}: ${detail}` : `Semrush error: ${detail}`);
 }
+
 function columnsMatch(values: readonly string[], columns: readonly string[]) {
   return (
     values.length === columns.length &&
     values.every((value, index) => normalizeColumnName(value) === normalizeColumnName(columns[index]!))
   );
 }
+
 function normalizeColumnName(value: string) {
   let output = "";
   for (const character of value.toLowerCase()) {
@@ -1231,6 +1318,7 @@ function normalizeColumnName(value: string) {
   }
   return output;
 }
+
 function parseSemicolonRecords(text: string) {
   const records: string[][] = [];
   let record: string[] = [];
@@ -1279,6 +1367,7 @@ function parseSemicolonRecords(text: string) {
   }
   return records;
 }
+
 function createAisaError(response: Response, payload: unknown, phase: "validate" | "execute"): ProviderRequestError {
   const errorValue = optionalRecord(payload)?.error;
   const error = optionalRecord(errorValue);
@@ -1299,9 +1388,11 @@ function createAisaError(response: Response, payload: unknown, phase: "validate"
   }
   return new ProviderRequestError(response.status, message, payload);
 }
+
 function isCredentialErrorCode(code: string | undefined): boolean {
   return code === "missing_api_key" || code === "invalid_api_key" || code === "revoked_api_key";
 }
+
 function normalizeFirecrawlInput(name: string, input: Record<string, unknown>): Record<string, unknown> {
   if (!name.includes("firecrawl")) return input;
   const normalized = { ...input };

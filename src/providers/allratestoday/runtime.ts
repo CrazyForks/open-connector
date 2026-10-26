@@ -17,7 +17,6 @@ import {
 } from "../provider-runtime.ts";
 
 export const allratestodayApiBaseUrl = "https://allratestoday.com/api/open";
-
 const defaultBase = "USD";
 
 export interface AllRatesTodayRuntimeContext {
@@ -70,7 +69,9 @@ export const allratestodayActionHandlers: ProviderActionHandlers<"allratestoday"
     if (rate === undefined) {
       throw providerInputError(`AllRatesToday open rates do not include ${to}.`);
     }
-    return { from, to, amount, rate, result: amount * rate, date: latest.date, attribution: latest.attribution };
+    const result = amount * rate;
+    if (!Number.isFinite(result)) throw providerInputError("The converted amount is too large to represent.");
+    return { from, to, amount, rate, result, date: latest.date, attribution: latest.attribution };
   },
 };
 
@@ -113,9 +114,11 @@ async function requestLatest(base: string, context: AllRatesTodayRuntimeContext)
     const rate = optionalNumber(value);
     if (rate !== undefined && Number.isFinite(rate) && rate > 0) rates[code] = rate;
   }
+  const date = optionalString(body.date);
+  if (!date) throw providerResponseError("AllRatesToday response has no date");
   return {
     base: optionalString(body.base_code) ?? base,
-    date: optionalString(body.date) ?? "",
+    date,
     last_updated: optionalString(body.time_last_update_utc),
     next_update: optionalString(body.time_next_update_utc),
     rates,

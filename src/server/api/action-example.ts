@@ -1,3 +1,5 @@
+// Support schema shapes used by the current action catalog; full JSON Schema coverage is not required.
+
 import type { JsonSchema } from "../../core/types.ts";
 import type { Schema } from "@cfworker/json-schema";
 
@@ -47,6 +49,7 @@ export function buildExampleInput(schema: JsonSchema): Record<string, unknown> {
     }
   }
   applyConditionalRequirements(seedSchema, seedSchema, input);
+  seedRequiredProperties(seedSchema, properties, input);
   return input;
 }
 
@@ -194,7 +197,7 @@ function seedRequirementBranches(
     return;
   }
   const merged = mergeBranch(schema, branch, keyword);
-  const mergedProperties = { ...properties, ...readSchemaProperties(merged) };
+  const mergedProperties = readSchemaProperties(mergeExampleSchemas({ properties }, merged));
   const required = readSchemaRequired(merged);
   for (const name of required) {
     input[name] = exampleValue(mergedProperties[name]);
@@ -219,6 +222,20 @@ function seedRequiredProperties(
   for (const name of readSchemaRequired(schema)) {
     if (!(name in input)) {
       input[name] = exampleValue(properties[name] ?? fallbackProperties[name]);
+    }
+  }
+  if (isSchemaObject(schema.dependentRequired)) {
+    const dependencies = schema.dependentRequired;
+    const pending = Object.keys(input);
+    for (let index = 0; index < pending.length; index += 1) {
+      const names = dependencies[pending[index]!];
+      if (!Array.isArray(names)) continue;
+      for (const name of names) {
+        if (typeof name === "string" && !(name in input)) {
+          input[name] = exampleValue(properties[name] ?? fallbackProperties[name]);
+          pending.push(name);
+        }
+      }
     }
   }
 }
@@ -419,6 +436,9 @@ function numberExample(schema: JsonSchema): number {
   }
   if (exclusiveMaximum !== undefined && candidate >= exclusiveMaximum) {
     candidate = integer ? Math.ceil(exclusiveMaximum) - 1 : exclusiveMaximum - 1;
+  }
+  if (!integer && minimum !== undefined && candidate < minimum) {
+    candidate = minimum;
   }
   if (
     exclusiveMinimum !== undefined &&
