@@ -20,7 +20,7 @@ through runtime options to admit, delay or deny each upstream HTTP attempt.
 | `OOMOL_CONNECT_NEW_ENCRYPTION_KEY`          | unset                     | New key used by `runtime:data rotate-key`.                                                                                                                                  |
 | `OOMOL_CONNECT_ADMIN_TOKEN`                 | unset                     | Requires bearer-token auth for local admin API, docs, and web console.                                                                                                      |
 | `OOMOL_CONNECT_RUNTIME_TOKEN`               | unset                     | Optional bootstrap runtime bearer token for `/v1` and MCP callers.                                                                                                          |
-| `OOMOL_CONNECT_EVENT_VERIFY_TOKEN`          | unset                     | Dedicated bearer token for `POST /v1/providers/slackbot/events/verify`. When unset the route returns 404. Kept separate from the admin and runtime tokens.                  |
+| `OOMOL_CONNECT_EVENT_VERIFY_TOKEN`          | unset                     | Dedicated bearer token for the `slackbot` and `microsoft_teams_bot` `/events/verify` routes. When unset they return 404. Separate from the admin and runtime tokens.        |
 | `OOMOL_CONNECT_ALLOWED_CUSTOM_OAUTH`        | unset                     | Enables connection-scoped OAuth apps for `*` or a comma-separated service list.                                                                                             |
 | `OOMOL_CONNECT_JWKS_URI`                    | unset                     | Node-only JWKS endpoint for validating runtime JWT access tokens.                                                                                                           |
 | `OOMOL_CONNECT_JWT_ISSUER`                  | unset                     | Expected `iss` claim for runtime JWT access tokens.                                                                                                                         |
@@ -365,3 +365,54 @@ read these environment variables. Both default to lazy action schemas; use
 `OOMOL_CONNECT_CATALOG_LAZY_SCHEMAS=false` or `lazySchemas: false` for eager loading.
 The embedded package includes its catalog and migrations; custom `assets` paths
 must point to those generated assets. The host must await `runtime.close()`.
+
+## Microsoft Teams bot event verification
+
+Connect a Microsoft Teams Bot account with its Application (client) ID, then set `OOMOL_CONNECT_EVENT_VERIFY_TOKEN` as described for Slack. Teams delivers activities to the messaging endpoint of your own ingress, which can forward them for verification. `Authorization` carries the dedicated token, so forward the activity request's own `Authorization` header value in `X-Botframework-Authorization`:
+
+```http
+POST /v1/providers/microsoft_teams_bot/events/verify
+Authorization: Bearer <event-verify-token>
+X-Botframework-Authorization: <Authorization header of the Teams request>
+X-OO-Connector-App-Id: <connection id>
+Content-Type: application/json
+
+<original Teams activity body, without re-serialization>
+```
+
+The bot is selected like it is for Actions: `X-OO-Connector-App-Id`, or an alias through `X-OO-Connector-Alias`. An unknown selector never falls back to another bot. The token audience must be that connection's Application (client) ID. Admin and runtime tokens do not grant access to this endpoint, and the dedicated token grants no access to other APIs.
+
+The verifier follows the Bot Connector authentication rules: an RS256 signature from the keys Bot Framework publishes, issuer `https://api.botframework.com` or `https://api.botframework.us`, audience, expiry (with five minutes of clock tolerance), a `serviceurl` claim equal to the activity's `serviceUrl`, and the signing key's channel endorsement. The token does not sign the request body: the `serviceUrl` claim is what binds the two, so treat the activity's other fields as unauthenticated content that only your own ingress has checked.
+
+Successful responses use the runtime envelope:
+
+```json
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "valid": true,
+    "appId": "00000000-0000-0000-0000-000000000001",
+    "serviceUrl": "https://smba.trafficmanager.net/teams/",
+    "channelId": "msteams"
+  },
+  "meta": {}
+}
+```
+
+Use the returned `serviceUrl` for replies. The body limit is 64 KiB. No event is stored or executed by verification; your ingress owns deduplication, retries and scheduling.
+
+| HTTP | errorCode                           | Meaning                                                     |
+| ---- | ----------------------------------- | ----------------------------------------------------------- |
+| 400  | `invalid_event_payload`             | Invalid JSON or missing `serviceUrl`                        |
+| 401  | `unauthorized`                      | Missing or incorrect dedicated token                        |
+| 401  | `invalid_webhook_signature`         | Invalid token, `serviceUrl` mismatch, or unendorsed channel |
+| 401  | `invalid_webhook_timestamp`         | Token expired or not yet valid                              |
+| 403  | `webhook_app_mismatch`              | Token audience is a different bot                           |
+| 404  | `event_verification_disabled`       | No verification token configured                            |
+| 404  | `connection_not_found`              | The selected connection does not exist                      |
+| 409  | `event_verification_not_configured` | No Microsoft Teams Bot connection with an Application ID    |
+| 413  | `webhook_request_too_large`         | Body exceeds 64 KiB                                         |
+| 502  | `event_verification_unavailable`    | Bot Framework signing keys could not be fetched             |
+
+Signing keys are cached for an hour and refetched when a token names an unknown key; a failed refresh keeps serving the keys already held. Government-cloud tokens (issuer `https://api.botframework.us`) are verified against that cloud's published keys.

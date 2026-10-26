@@ -36,6 +36,10 @@ import { createConnectionRoutes } from "./api/connection-routes.ts";
 import { createConsoleCatalogRoutes } from "./api/console-catalog-routes.ts";
 import { createConsoleOAuthRoutes } from "./api/console-oauth-routes.ts";
 import { createDocsRoutes, loadDocsHandler } from "./api/docs-routes.ts";
+import {
+  createTeamsBotEventVerificationRoutes,
+  rejectUnauthorizedEventVerification,
+} from "./api/event-verification-routes.ts";
 import { HttpRequestError, internalError, jsonError, notFound } from "./api/http-utils.ts";
 import { createMarketplaceRoutes } from "./api/marketplace-routes.ts";
 import { createMcpRoutes, loadMcpModule } from "./api/mcp-routes.ts";
@@ -51,8 +55,9 @@ import { createSaasOAuthRoutes } from "./api/saas-oauth-routes.ts";
 import { createSaasProjectRoutes } from "./api/saas-project-routes.ts";
 import { createTransitFileRoutes } from "./api/transit-file-routes.ts";
 import { createTriggerRoutes } from "./api/trigger-routes.ts";
+import { readEventRequestBody } from "./event-request-body.ts";
 import { ProxyRunner } from "./proxy/proxy-runner.ts";
-import { readSlackEventRequestBody, verifySlackEventRequest } from "./slack-event-verification.ts";
+import { verifySlackEventRequest } from "./slack-event-verification.ts";
 
 /**
  * Import and evaluate the modules the /mcp and /docs routes defer to their first request. The Node server never
@@ -169,21 +174,8 @@ export class ConnectServer {
     // Inbound provider event verification. This route authenticates with a dedicated token
     // so a host ingress can delegate signature verification without receiving the admin token.
     app.post("/v1/providers/slackbot/events/verify", async (context) => {
-      const expected = this.options.eventVerifyToken?.trim();
-      if (!expected)
-        return writeRuntimeFailure(context, {
-          status: 404,
-          errorCode: "event_verification_disabled",
-          message: "Event verification is disabled.",
-        });
-      const authorization = context.req.header("authorization") ?? "";
-      const provided = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
-      if (!(await sameSecret(provided, expected)))
-        return writeRuntimeFailure(context, {
-          status: 401,
-          errorCode: "unauthorized",
-          message: "A valid event verification token is required.",
-        });
+      const rejected = await rejectUnauthorizedEventVerification(context, this.options.eventVerifyToken);
+      if (rejected) return rejected;
       const config = await this.options.oauthClientConfigs.getConfig("slackbot");
       const appId = String(config?.extra?.appId ?? "").trim();
       const signingSecret = String(config?.secretExtra?.signingSecret ?? "").trim();
@@ -193,7 +185,7 @@ export class ConnectServer {
           errorCode: "event_verification_not_configured",
           message: "Configure the default Slack App ID and Signing Secret.",
         });
-      const rawBody = await readSlackEventRequestBody(context.req.raw);
+      const rawBody = await readEventRequestBody(context.req.raw);
       if (!rawBody)
         return writeRuntimeFailure(context, {
           status: 413,
@@ -244,6 +236,14 @@ export class ConnectServer {
       }
       return writeRuntimeSuccess(context, result);
     });
+
+    app.route(
+      "/v1",
+      createTeamsBotEventVerificationRoutes({
+        connections: this.options.connections,
+        eventVerifyToken: this.options.eventVerifyToken,
+      }),
+    );
 
     // Health and runtime discovery / execution endpoints
     app.get("/v1/health", (context) => writeRuntimeSuccess(context, { ok: true, runtime: "oomol-connect" }));
@@ -443,19 +443,4 @@ export class ConnectServer {
 
     return app;
   }
-}
-
-/** Hash both values before a constant-time comparison so length never leaks. */
-async function sameSecret(provided: string, expected: string): Promise<boolean> {
-  if (!provided || !expected) return false;
-  const encoder = new TextEncoder();
-  const [left, right] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
-    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
-  ]);
-  const a = new Uint8Array(left);
-  const b = new Uint8Array(right);
-  let difference = 0;
-  for (let index = 0; index < a.length; index += 1) difference |= a[index]! ^ b[index]!;
-  return difference === 0;
 }

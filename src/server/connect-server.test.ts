@@ -143,6 +143,46 @@ afterEach(() => {
 });
 
 describe("ConnectServer", () => {
+  describe("Microsoft Teams bot event verification", () => {
+    const teamsBotProvider: ProviderDefinition = {
+      service: "microsoft_teams_bot",
+      displayName: "Microsoft Teams Bot",
+      categories: ["Communication"],
+      authTypes: ["custom_credential"],
+      auth: [
+        {
+          type: "custom_credential",
+          fields: [{ key: "appId", label: "App ID", inputType: "text", required: true, secret: false }],
+        },
+      ],
+      actions: [],
+    };
+
+    function verify(app: ReturnType<ConnectServer["createApp"]>, headers: Record<string, string> = {}) {
+      return app.request("/v1/providers/microsoft_teams_bot/events/verify", {
+        method: "POST",
+        headers: { authorization: "Bearer verify-token", ...headers },
+        body: "{}",
+      });
+    }
+
+    it("is disabled without a verification token", async () => {
+      const app = createTestServer([teamsBotProvider]).createApp();
+      expect((await verify(app)).status).toBe(404);
+    });
+
+    it("requires the dedicated verification token", async () => {
+      const app = createTestServer([teamsBotProvider], { eventVerifyToken: "verify-token" }).createApp();
+      expect((await verify(app, { authorization: "Bearer wrong" })).status).toBe(401);
+    });
+
+    it("requires a connected bot, selected the way Actions select a connection", async () => {
+      const app = createTestServer([teamsBotProvider], { eventVerifyToken: "verify-token" }).createApp();
+      expect((await verify(app)).status).toBe(409);
+      expect((await verify(app, { "x-oo-connector-alias": "missing" })).status).toBe(404);
+    });
+  });
+
   describe("Slack inbound event verification", () => {
     const slackProvider: ProviderDefinition = {
       ...oauthProvider,

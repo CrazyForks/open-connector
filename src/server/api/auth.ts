@@ -148,6 +148,7 @@ function isPublicPath(path: string, method: string): boolean {
     // This route performs its own dedicated bearer check; the global admin/runtime
     // middleware must not require a different token.
     (method === "POST" && path === "/v1/providers/slackbot/events/verify") ||
+    (method === "POST" && path === "/v1/providers/microsoft_teams_bot/events/verify") ||
     isConsoleShellRequest(path, method)
   );
 }
