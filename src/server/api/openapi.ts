@@ -459,7 +459,7 @@ export function createOpenApiDocument(options: OpenApiDocumentOptions = {}): Ope
         tags: ["Triggers"],
         summary: "Verify an inbound Microsoft Teams bot activity.",
         description:
-          "Requires the dedicated OOMOL_CONNECT_EVENT_VERIFY_TOKEN in Authorization. The activity's own Bot Framework bearer token is forwarded in x-botframework-authorization and checked against the selected microsoft_teams_bot connection's Application (client) ID. The token does not sign the body; it is bound to the activity through the serviceUrl claim. No event is stored or scheduled.",
+          "Requires the dedicated OOMOL_CONNECT_EVENT_VERIFY_TOKEN in Authorization. The activity's own Bot Framework bearer token is forwarded in x-botframework-authorization and checked against the selected microsoft_teams_bot connection's Application (client) ID. The token must use RS256, match the Bot Framework issuer and audience, be current, and name the activity's documented Bot Connector serviceUrl. The token does not sign the activity body. No event is stored or scheduled.",
         security: [{ eventVerificationToken: [] }],
         parameters: [
           { name: "x-botframework-authorization", in: "header", required: true, schema: jsonSchema.string() },
@@ -476,10 +476,25 @@ export function createOpenApiDocument(options: OpenApiDocumentOptions = {}): Ope
               properties: {
                 valid: { type: "boolean", const: true },
                 appId: { type: "string" },
+                tenantId: jsonSchema.nullableString("Microsoft Entra tenant ID from the verified activity."),
                 serviceUrl: { type: "string" },
-                channelId: jsonSchema.nullableString("Channel named by the activity."),
+                activityId: jsonSchema.nullableString("Activity ID from the verified activity."),
+                conversationId: jsonSchema.nullableString("Conversation ID from the verified activity."),
+                aadObjectId: jsonSchema.nullableString(
+                  "Sender's Microsoft Entra object ID from the verified activity.",
+                ),
+                channelId: jsonSchema.nullableString("Channel named by the verified activity."),
               },
-              required: ["valid", "appId", "serviceUrl", "channelId"],
+              required: [
+                "valid",
+                "appId",
+                "tenantId",
+                "serviceUrl",
+                "activityId",
+                "conversationId",
+                "aadObjectId",
+                "channelId",
+              ],
             }),
           ),
           400: jsonResponse(runtimeFailureSchema(), "invalid_event_payload: invalid JSON or missing serviceUrl."),

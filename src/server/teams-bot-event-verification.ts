@@ -1,6 +1,7 @@
 import type { CryptoKey as JoseCryptoKey, JWK } from "jose";
 
-import { optionalRecord, optionalString } from "../core/cast.ts";
+import { optionalRecord, optionalString, optionalStringOrNull } from "../core/cast.ts";
+import { isAllowedTeamsBotConnectorHost } from "../core/teams-bot-connector.ts";
 import { eventRequestMaximumBodyBytes } from "./event-request-body.ts";
 
 /** Bot Framework publishes RSA keys for RS256 tokens in its OpenID metadata. */
@@ -54,7 +55,16 @@ export interface TeamsBotEventVerificationInput {
 }
 
 export type TeamsBotEventVerificationResult =
-  | { valid: true; appId: string; serviceUrl: string; channelId: string | null }
+  | {
+      valid: true;
+      appId: string;
+      tenantId: string | null;
+      serviceUrl: string;
+      activityId: string | null;
+      conversationId: string | null;
+      aadObjectId: string | null;
+      channelId: string | null;
+    }
   | {
       valid: false;
       reason: "token" | "timestamp" | "app" | "payload" | "service_url" | "channel" | "body_too_large";
@@ -120,14 +130,28 @@ export async function verifyTeamsBotEventRequest(
   }
   const serviceUrl = optionalString(activity?.serviceUrl);
   if (!activity || !serviceUrl) return { valid: false, reason: "payload" };
-  if (serviceUrlClaim !== serviceUrl) return { valid: false, reason: "service_url" };
+  if (serviceUrlClaim !== serviceUrl || !allowedConnectorServiceUrl(serviceUrl))
+    return { valid: false, reason: "service_url" };
 
   // A key without endorsements, or an activity naming no channel, asserts nothing to check.
   const channelId = optionalString(activity.channelId) ?? null;
   if (channelId && signingKey.endorsements.length > 0 && !signingKey.endorsements.includes(channelId))
     return { valid: false, reason: "channel" };
 
-  return { valid: true, appId: input.appId, serviceUrl, channelId };
+  const conversation = optionalRecord(activity.conversation);
+  const channelData = optionalRecord(activity.channelData);
+  const from = optionalRecord(activity.from);
+  return {
+    valid: true,
+    appId: input.appId,
+    tenantId:
+      optionalStringOrNull(conversation?.tenantId) ?? optionalStringOrNull(optionalRecord(channelData?.tenant)?.id),
+    serviceUrl,
+    activityId: optionalStringOrNull(activity.id),
+    conversationId: optionalStringOrNull(conversation?.id),
+    aadObjectId: optionalStringOrNull(from?.aadObjectId),
+    channelId,
+  };
 }
 
 function rejectionReason(error: unknown, joseErrors: typeof import("jose").errors): "token" | "timestamp" | "app" {
@@ -226,4 +250,21 @@ async function fetchJson(url: string): Promise<unknown> {
   const text = await response.text();
   if (text.length > keysDocumentMaximumBytes) throw new Error("Bot Framework keys document is too large.");
   return JSON.parse(text);
+}
+
+function allowedConnectorServiceUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.search &&
+      !url.hash &&
+      isAllowedTeamsBotConnectorHost(url.hostname)
+    );
+  } catch {
+    return false;
+  }
 }

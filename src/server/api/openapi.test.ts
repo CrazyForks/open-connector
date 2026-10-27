@@ -299,3 +299,46 @@ describe("Slack verification contract", () => {
     }
   });
 });
+
+describe("Teams verification contract", () => {
+  it("documents trusted activity identifiers", () => {
+    const document = createOpenApiDocument();
+    const route = document.paths["/v1/providers/microsoft_teams_bot/events/verify"] as {
+      post: {
+        description: string;
+        responses: Record<
+          string,
+          {
+            content: {
+              "application/json": {
+                schema: {
+                  properties: Record<
+                    string,
+                    { required?: string[]; properties?: Record<string, { anyOf?: Array<Record<string, unknown>> }> }
+                  >;
+                };
+              };
+            };
+          }
+        >;
+      };
+    };
+    const data = route.post.responses["200"]!.content["application/json"].schema.properties.data!;
+    expect(route.post.description).toMatch(/Bot Connector/i);
+    expect(data.required).toEqual([
+      "valid",
+      "appId",
+      "tenantId",
+      "serviceUrl",
+      "activityId",
+      "conversationId",
+      "aadObjectId",
+      "channelId",
+    ]);
+    for (const field of ["tenantId", "activityId", "conversationId", "aadObjectId"]) {
+      expect(data.properties![field]).toMatchObject({
+        anyOf: [{ type: "string" }, { type: "null" }],
+      });
+    }
+  });
+});

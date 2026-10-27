@@ -382,7 +382,7 @@ Content-Type: application/json
 
 The bot is selected like it is for Actions: `X-OO-Connector-App-Id`, or an alias through `X-OO-Connector-Alias`. An unknown selector never falls back to another bot. The token audience must be that connection's Application (client) ID. Admin and runtime tokens do not grant access to this endpoint, and the dedicated token grants no access to other APIs.
 
-The verifier follows the Bot Connector authentication rules: an RS256 signature from the keys Bot Framework publishes, issuer `https://api.botframework.com` or `https://api.botframework.us`, audience, expiry (with five minutes of clock tolerance), a `serviceurl` claim equal to the activity's `serviceUrl`, and the signing key's channel endorsement. The token does not sign the request body: the `serviceUrl` claim is what binds the two, so treat the activity's other fields as unauthenticated content that only your own ingress has checked.
+The verifier follows the Bot Connector authentication rules: an RS256 signature from the keys Bot Framework publishes, issuer `https://api.botframework.com` or `https://api.botframework.us`, audience, expiry (with five minutes of clock tolerance), a `serviceurl` claim equal to the activity's `serviceUrl`, a `serviceUrl` on a documented Microsoft Teams Bot Connector host, and the signing key's channel endorsement. The token does not sign the request body: the `serviceUrl` claim is what binds the two, so treat the activity's other fields as unauthenticated content that only your own ingress has checked.
 
 Successful responses use the runtime envelope:
 
@@ -393,14 +393,18 @@ Successful responses use the runtime envelope:
   "data": {
     "valid": true,
     "appId": "00000000-0000-0000-0000-000000000001",
+    "tenantId": "00000000-0000-0000-0000-000000000002",
     "serviceUrl": "https://smba.trafficmanager.net/teams/",
+    "activityId": "activity-id",
+    "conversationId": "conversation-id",
+    "aadObjectId": "00000000-0000-0000-0000-000000000003",
     "channelId": "msteams"
   },
   "meta": {}
 }
 ```
 
-Use the returned `serviceUrl` for replies. The body limit is 64 KiB. No event is stored or executed by verification; your ingress owns deduplication, retries and scheduling.
+Use the returned `serviceUrl` for replies. `tenantId`, `activityId`, `conversationId` and `aadObjectId` are extracted from the activity after the Bot Framework token and service URL are verified. The body limit is 64 KiB. No event is stored or executed by verification; your ingress owns deduplication, retries and scheduling.
 
 | HTTP | errorCode                           | Meaning                                                     |
 | ---- | ----------------------------------- | ----------------------------------------------------------- |

@@ -30,7 +30,17 @@ async function token(options: TokenOptions = {}): Promise<string> {
 }
 
 function activity(overrides: Record<string, unknown> = {}): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify({ type: "message", serviceUrl, channelId: "msteams", ...overrides }));
+  return new TextEncoder().encode(
+    JSON.stringify({
+      id: "activity-1",
+      type: "message",
+      serviceUrl,
+      channelId: "msteams",
+      conversation: { id: "conversation-1", tenantId: "tenant-1" },
+      from: { id: "29:user-1", aadObjectId: "aad-object-1" },
+      ...overrides,
+    }),
+  );
 }
 
 async function verify(
@@ -49,8 +59,55 @@ async function verify(
 }
 
 describe("Teams bot inbound activity verification", () => {
-  it("accepts a token for the bot that matches the activity serviceUrl", async () => {
-    await expect(verify()).resolves.toEqual({ valid: true, appId, serviceUrl, channelId: "msteams" });
+  it("accepts a token for the bot and returns trusted activity identifiers", async () => {
+    await expect(verify()).resolves.toEqual({
+      valid: true,
+      appId,
+      tenantId: "tenant-1",
+      serviceUrl,
+      activityId: "activity-1",
+      conversationId: "conversation-1",
+      aadObjectId: "aad-object-1",
+      channelId: "msteams",
+    });
+  });
+
+  it("uses channelData tenant when the conversation has no tenant", async () => {
+    await expect(
+      verify(
+        {},
+        activity({
+          conversation: { id: "conversation-1" },
+          channelData: { tenant: { id: "tenant-from-channel-data" } },
+        }),
+      ),
+    ).resolves.toMatchObject({ valid: true, tenantId: "tenant-from-channel-data" });
+  });
+
+  it.each([
+    "https://smba.trafficmanager.net/teams/",
+    "https://smba.infra.gcc.teams.microsoft.com/",
+    "https://smba.infra.gov.teams.microsoft.us/",
+    "https://smba.infra.dod.teams.microsoft.us/",
+  ])("accepts the documented Bot Connector host %s", async (allowedServiceUrl) => {
+    await expect(
+      verify({ claimServiceUrl: allowedServiceUrl }, activity({ serviceUrl: allowedServiceUrl })),
+    ).resolves.toMatchObject({ valid: true, serviceUrl: allowedServiceUrl });
+  });
+
+  it.each([
+    "https://user@smba.trafficmanager.net/teams/",
+    "https://:password@smba.trafficmanager.net/teams/",
+    "https://smba.trafficmanager.net/teams/#fragment",
+    "https://attacker.example/teams/",
+    "https://smba.trafficmanager.net.evil.example/teams/",
+    "http://smba.trafficmanager.net/teams/",
+    "https://smba.trafficmanager.net:8443/teams/",
+    "https://smba.trafficmanager.net/teams/?redirect=attacker",
+  ])("rejects the unsafe serviceUrl %s", async (disallowedServiceUrl) => {
+    await expect(
+      verify({ claimServiceUrl: disallowedServiceUrl }, activity({ serviceUrl: disallowedServiceUrl })),
+    ).resolves.toEqual({ valid: false, reason: "service_url" });
   });
 
   it("rejects a token signed by another key", async () => {

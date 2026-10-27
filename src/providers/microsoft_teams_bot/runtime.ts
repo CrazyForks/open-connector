@@ -4,6 +4,7 @@ import type { ProviderFetch } from "../provider-runtime.ts";
 
 import { compactObject, optionalInteger, optionalRecord, optionalString } from "../../core/cast.ts";
 import { assertPublicHttpUrl, encodePathSegment } from "../../core/request.ts";
+import { isAllowedTeamsBotConnectorHost } from "../../core/teams-bot-connector.ts";
 import {
   providerInputError,
   ProviderRequestError,
@@ -22,15 +23,6 @@ const service = "microsoft_teams_bot";
 const tokenRefreshSkewMs = 60_000;
 
 const defaultTextFormat = "markdown";
-
-/**
- * Hosts that may receive the bot's access token, matched as an exact host or a
- * subdomain. They are the Bot Connector hosts Microsoft documents for Teams:
- * the public service (smba.trafficmanager.net), GCC (smba.infra.gcc.teams.microsoft.com),
- * and GCC High / DoD (smba.infra.{gov,dod}.teams.microsoft.us). Anything else is
- * refused so a token cannot be sent to a caller-supplied host.
- */
-const allowedServiceHostSuffixes = ["smba.trafficmanager.net", "teams.microsoft.com", "teams.microsoft.us"];
 
 interface TeamsBotCloud {
   loginEndpoint: string;
@@ -192,8 +184,7 @@ export function normalizeServiceUrl(value: string): string {
   if (url.protocol !== "https:" || url.username || url.password) {
     throw providerInputError("serviceUrl must be an https URL without credentials.");
   }
-  const host = url.hostname.toLowerCase();
-  if (!allowedServiceHostSuffixes.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) {
+  if (!isAllowedTeamsBotConnectorHost(url.hostname)) {
     throw providerInputError("serviceUrl must be a Microsoft Teams Bot Connector host.");
   }
   return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
