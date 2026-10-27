@@ -4,7 +4,7 @@
 
 [English](../README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Français](README.fr.md) | [Español](README.es.md)
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](../LICENSE.txt)
+[![License: Modified Apache-2.0](https://img.shields.io/badge/License-Modified%20Apache--2.0-blue.svg)](../LICENSE.txt)
 [![npm](https://img.shields.io/npm/v/@oomol-lab/open-connector.svg)](https://www.npmjs.com/package/@oomol-lab/open-connector)
 ![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)
 ![Cloudflare compatible](https://img.shields.io/badge/Cloudflare-compatible-F38020)
@@ -235,9 +235,13 @@ npm test
 ## 授權範圍
 
 除非另有說明，本儲存庫中由專案作者撰寫的原始碼、指令碼、產生的專案鷹架、測試及文件，
-均依 Apache License, Version 2.0 授權。請參閱 [LICENSE.txt](../LICENSE.txt)。
+均依 OpenConnector License 授權，它是在 Apache License 2.0 基礎上加了附加條件的修改版。請參閱 [LICENSE.txt](../LICENSE.txt)。
 
-本儲存庫的 Apache-2.0 授權並未授予任何第三方產品、服務提供者、應用程式、API、商標、服務標章、
+你可以出於任何目的使用、修改及自行託管 OpenConnector，包括商業使用及嵌入到你自己的產品中。唯一的附加條件是：
+將 OpenConnector 作為託管的連接器服務提供給第三方，需要取得 OOMOL 的商業授權。
+v1.9.4 及之前的版本仍依未修改的 Apache License 2.0 授權。詳見 [NOTICE.md](../NOTICE.md)。
+
+本儲存庫的授權並未授予任何第三方產品、服務提供者、應用程式、API、商標、服務標章、
 商號、標誌、圖示、品牌資產、文件、螢幕擷取畫面，或其他由其權利人擁有之著作權資料的使用權。
 
 服務提供者及應用程式名稱、中繼資料、連結、權限範圍、權限，以及選用的標誌或圖示，僅用於識別服務及實現互通性。

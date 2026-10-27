@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@oomol-lab/open-connector.svg)](https://www.npmjs.com/package/@oomol-lab/open-connector)
 [![Node.js](https://img.shields.io/node/v/@oomol-lab/open-connector.svg)](https://nodejs.org)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://github.com/oomol-lab/open-connector/blob/main/LICENSE.txt)
+[![License: Modified Apache-2.0](https://img.shields.io/badge/License-Modified%20Apache--2.0-blue.svg)](https://github.com/oomol-lab/open-connector/blob/main/LICENSE.txt)
 
 Embeddable Open Connector runtime for Node.js 22.23.4+, 24.22.1+, or 26.12.1+ within those release
 lines, and Bun 1.4.4+. These minimums include the CVE-2026-111497 Brotli decoder fix.
@@ -174,4 +174,7 @@ and the installed npm package still contains all providers.
 
 ## License
 
-[Apache-2.0](https://github.com/oomol-lab/open-connector/blob/main/LICENSE.txt)
+[OpenConnector License](https://github.com/oomol-lab/open-connector/blob/main/LICENSE.txt), a modified
+Apache License 2.0. Providing OpenConnector to third parties as a hosted connector service requires a
+commercial license from OOMOL. See
+[NOTICE.md](https://github.com/oomol-lab/open-connector/blob/main/NOTICE.md).

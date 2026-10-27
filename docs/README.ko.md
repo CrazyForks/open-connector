@@ -4,7 +4,7 @@
 
 [English](../README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Français](README.fr.md) | [Español](README.es.md)
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](../LICENSE.txt)
+[![License: Modified Apache-2.0](https://img.shields.io/badge/License-Modified%20Apache--2.0-blue.svg)](../LICENSE.txt)
 [![npm](https://img.shields.io/npm/v/@oomol-lab/open-connector.svg)](https://www.npmjs.com/package/@oomol-lab/open-connector)
 ![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)
 ![Cloudflare compatible](https://img.shields.io/badge/Cloudflare-compatible-F38020)
@@ -249,10 +249,15 @@ Provider 코드는 `src/providers/<service>`에 있습니다. Provider 기여 �
 ## 라이선스 범위
 
 별도로 명시하지 않는 한 이 repository를 위해 작성된 source code, script, 생성된 project scaffolding,
-test, 문서는 Apache License Version 2.0에 따라 사용이 허가됩니다.
+test, 문서는 Apache License 2.0을 수정한 OpenConnector License에 따라 사용이 허가됩니다.
 [LICENSE.txt](../LICENSE.txt)를 참조하세요.
 
-이 repository의 Apache-2.0 license는 각 권리자가 소유한 타사 제품, provider, app, API, 상표,
+상용 사용과 자체 제품에 포함하는 것을 비롯해 어떤 목적으로든 OpenConnector를 사용, 수정, self-host할
+수 있습니다. 추가 조건은 하나뿐이며, OpenConnector를 hosted connector service로 제3자에게 제공하려면
+OOMOL의 commercial license가 필요합니다. v1.9.4 이하 release는 계속 수정되지 않은 Apache License
+2.0을 따릅니다. [NOTICE.md](../NOTICE.md)를 참조하세요.
+
+이 repository의 license는 각 권리자가 소유한 타사 제품, provider, app, API, 상표,
 service mark, trade name, logo, icon, brand asset, 문서, screenshot 또는 기타 저작물에 대한 권리를
 부여하지 않습니다.
 

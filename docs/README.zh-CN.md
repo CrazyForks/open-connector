@@ -4,7 +4,7 @@
 
 [English](../README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Français](README.fr.md) | [Español](README.es.md)
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](../LICENSE.txt)
+[![License: Modified Apache-2.0](https://img.shields.io/badge/License-Modified%20Apache--2.0-blue.svg)](../LICENSE.txt)
 [![npm](https://img.shields.io/npm/v/@oomol-lab/open-connector.svg)](https://www.npmjs.com/package/@oomol-lab/open-connector)
 ![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)
 ![Cloudflare compatible](https://img.shields.io/badge/Cloudflare-compatible-F38020)
@@ -234,10 +234,14 @@ Provider 代码位于 `src/providers/<service>`。Provider 贡献规则见
 
 ## 许可证范围
 
-除非另有说明，本仓库中的源代码、脚本、生成的项目脚手架、测试和文档均基于 Apache License, Version
-2.0 授权。见 [LICENSE.txt](../LICENSE.txt)。
+除非另有说明，本仓库中的源代码、脚本、生成的项目脚手架、测试和文档均基于 OpenConnector License
+授权，它是在 Apache License 2.0 基础上加了附加条件的修改版。见 [LICENSE.txt](../LICENSE.txt)。
 
-本仓库的 Apache-2.0 许可证不授予任何第三方产品、provider、app、API、商标、服务标识、商号、logo、
+你可以出于任何目的使用、修改和自托管 OpenConnector，包括商业使用和嵌入到你自己的产品中。唯一的附加条件是：
+把 OpenConnector 作为托管的连接器服务提供给第三方，需要获得 OOMOL 的商业授权。
+v1.9.4 及之前的版本仍以未修改的 Apache License 2.0 授权。详见 [NOTICE.md](../NOTICE.md)。
+
+本仓库的许可证不授予任何第三方产品、provider、app、API、商标、服务标识、商号、logo、
 icon、品牌资产、文档、截图或其它归属于相应权利人的版权材料的使用权。
 
 Provider 和 app 名称、metadata、链接、scope、permission 以及可选 logo/icon 仅用于识别服务和实现互操作。

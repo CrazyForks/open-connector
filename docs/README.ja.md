@@ -4,7 +4,7 @@
 
 [English](../README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Français](README.fr.md) | [Español](README.es.md)
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](../LICENSE.txt)
+[![License: Modified Apache-2.0](https://img.shields.io/badge/License-Modified%20Apache--2.0-blue.svg)](../LICENSE.txt)
 [![npm](https://img.shields.io/npm/v/@oomol-lab/open-connector.svg)](https://www.npmjs.com/package/@oomol-lab/open-connector)
 ![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)
 ![Cloudflare compatible](https://img.shields.io/badge/Cloudflare-compatible-F38020)
@@ -241,9 +241,13 @@ Provider code は `src/providers/<service>` 配下にあります。Provider con
 ## ライセンス範囲
 
 特に明記されていない限り、この repository の source code、script、生成された project scaffolding、test、
-documentation は Apache License, Version 2.0 の下でライセンスされています。[LICENSE.txt](../LICENSE.txt) を参照してください。
+documentation は Apache License 2.0 を修正した OpenConnector License の下でライセンスされています。[LICENSE.txt](../LICENSE.txt) を参照してください。
 
-この repository の Apache-2.0 license は、各権利者が所有する third-party product、provider、app、API、
+OpenConnector は商用利用や自社 product への組み込みを含め、任意の目的で使用、変更、self-host できます。追加条件は 1 つだけで、
+OpenConnector を hosted connector service として第三者に提供する場合は OOMOL の commercial license が必要です。
+v1.9.4 以前の release は引き続き修正なしの Apache License 2.0 です。[NOTICE.md](../NOTICE.md) を参照してください。
+
+この repository の license は、各権利者が所有する third-party product、provider、app、API、
 trademark、service mark、trade name、logo、icon、brand asset、documentation、screenshot、その他の copyrighted
 material に対する権利を付与するものではありません。
 

@@ -4,7 +4,7 @@
 
 [English](../README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Français](README.fr.md) | [Español](README.es.md)
 
-[![Licencia: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](../LICENSE.txt)
+[![Licencia: Modified Apache-2.0](https://img.shields.io/badge/License-Modified%20Apache--2.0-blue.svg)](../LICENSE.txt)
 [![npm](https://img.shields.io/npm/v/@oomol-lab/open-connector.svg)](https://www.npmjs.com/package/@oomol-lab/open-connector)
 ![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)
 ![Compatible con Cloudflare](https://img.shields.io/badge/Cloudflare-compatible-F38020)
@@ -262,10 +262,16 @@ El código de los proveedores se encuentra en `src/providers/<service>`. Consult
 ## Alcance de la licencia
 
 Salvo que se indique lo contrario, el código fuente, los scripts, las estructuras de proyecto generadas,
-las pruebas y la documentación creados para este repositorio se distribuyen bajo la licencia Apache,
-versión 2.0. Consulta [LICENSE.txt](../LICENSE.txt).
+las pruebas y la documentación creados para este repositorio se distribuyen bajo la OpenConnector
+License, una versión modificada de la licencia Apache 2.0. Consulta [LICENSE.txt](../LICENSE.txt).
 
-La licencia Apache-2.0 de este repositorio no concede derechos sobre productos, proveedores,
+Puedes usar, modificar y autoalojar OpenConnector para cualquier fin, incluido el uso comercial y su
+integración en tus propios productos. La única condición añadida es que ofrecer OpenConnector a
+terceros como servicio de conectores alojado requiere una licencia comercial de OOMOL. Las versiones
+hasta la v1.9.4, inclusive, siguen bajo la licencia Apache 2.0 sin modificar. Consulta
+[NOTICE.md](../NOTICE.md).
+
+La licencia de este repositorio no concede derechos sobre productos, proveedores,
 aplicaciones, API, marcas comerciales, marcas de servicio, nombres comerciales, logotipos, iconos,
 recursos de marca, documentación, capturas de pantalla ni otros materiales protegidos por derechos
 de autor que pertenezcan a terceros.

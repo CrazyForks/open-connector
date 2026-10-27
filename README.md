@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](docs/README.zh-CN.md) | [繁體中文](docs/README.zh-TW.md) | [日本語](docs/README.ja.md) | [한국어](docs/README.ko.md) | [Русский](docs/README.ru.md) | [Français](docs/README.fr.md) | [Español](docs/README.es.md)
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE.txt)
+[![License: Modified Apache-2.0](https://img.shields.io/badge/License-Modified%20Apache--2.0-blue.svg)](LICENSE.txt)
 [![npm](https://img.shields.io/npm/v/@oomol-lab/open-connector.svg)](https://www.npmjs.com/package/@oomol-lab/open-connector)
 ![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)
 ![Cloudflare compatible](https://img.shields.io/badge/Cloudflare-compatible-F38020)
@@ -282,10 +282,15 @@ Provider code lives under `src/providers/<service>`. See
 ## License Scope
 
 Unless otherwise noted, the source code, scripts, generated project scaffolding, tests, and
-documentation authored for this repository are licensed under the Apache License, Version 2.0. See
-[LICENSE.txt](LICENSE.txt).
+documentation authored for this repository are licensed under the OpenConnector License, a modified
+Apache License 2.0. See [LICENSE.txt](LICENSE.txt).
 
-The Apache-2.0 license for this repository does not grant rights to third-party products,
+You may use, modify, and self-host OpenConnector for any purpose, including commercial use and
+embedding it in your own products. The one added condition is that providing OpenConnector to third
+parties as a hosted connector service requires a commercial license from OOMOL. Releases up to and
+including v1.9.4 remain under the unmodified Apache License 2.0. See [NOTICE.md](NOTICE.md).
+
+The license for this repository does not grant rights to third-party products,
 providers, apps, APIs, trademarks, service marks, trade names, logos, icons, brand assets,
 documentation, screenshots, or other copyrighted materials owned by their respective holders.
 
