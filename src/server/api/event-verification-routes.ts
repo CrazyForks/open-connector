@@ -6,12 +6,14 @@ import { Hono } from "hono";
 import { ConnectionError } from "../../connection-error.ts";
 import { optionalString } from "../../core/cast.ts";
 import { readEventRequestBody } from "../event-request-body.ts";
+import { verifyFeishuEventRequest } from "../feishu-event-verification.ts";
 import { verifySlackEventRequest } from "../slack-event-verification.ts";
 import { BotFrameworkKeysUnavailableError, verifyTeamsBotEventRequest } from "../teams-bot-event-verification.ts";
 import { readConnectionName } from "./http-utils.ts";
 import { mapConnectionErrorStatus, writeRuntimeFailure, writeRuntimeSuccess } from "./runtime-api.ts";
 
 const teamsBotService = "microsoft_teams_bot";
+const feishuAppBotService = "feishu_app_bot";
 // Authorization carries the dedicated verify token, so the activity's own bearer token is forwarded here.
 const botFrameworkAuthorizationHeader = "x-botframework-authorization";
 
@@ -205,6 +207,88 @@ export function createEventVerificationRoutes({
           status: 401,
           errorCode: "invalid_webhook_signature",
           message: "Invalid Bot Framework token.",
+        });
+    }
+  });
+
+  app.post(`/providers/${feishuAppBotService}/events/verify`, async (context) => {
+    const rejected = await rejectUnauthorizedEventVerification(context, eventVerifyToken);
+    if (rejected) return rejected;
+
+    let appId: string | undefined;
+    let verificationToken: string | undefined;
+    let encryptKey: string | undefined;
+    try {
+      const connection = await connections.resolveConnection(
+        feishuAppBotService,
+        readConnectionName(context),
+        optionalString(context.req.header("x-oo-connector-app-id")),
+      );
+      if (connection.source === "local" && connection.credential?.authType === "custom_credential") {
+        appId = optionalString(connection.credential.values.appId);
+        verificationToken = optionalString(connection.credential.values.verificationToken);
+        encryptKey = optionalString(connection.credential.values.encryptKey);
+      }
+    } catch (error) {
+      if (error instanceof ConnectionError)
+        return writeRuntimeFailure(context, {
+          status: mapConnectionErrorStatus(error),
+          errorCode: error.code,
+          message: error.message,
+        });
+      throw error;
+    }
+    if (!appId || !verificationToken || !encryptKey)
+      return writeRuntimeFailure(context, {
+        status: 409,
+        errorCode: "event_verification_not_configured",
+        message: "Connect a Feishu App Bot with appId, verificationToken and encryptKey first.",
+      });
+
+    const rawBody = await readEventRequestBody(context.req.raw);
+    if (!rawBody)
+      return writeRuntimeFailure(context, {
+        status: 413,
+        errorCode: "webhook_request_too_large",
+        message: "Feishu request body exceeds 64 KiB.",
+      });
+
+    const result = await verifyFeishuEventRequest({
+      rawBody,
+      timestamp: context.req.header("x-lark-request-timestamp") ?? "",
+      nonce: context.req.header("x-lark-request-nonce") ?? "",
+      signature: context.req.header("x-lark-signature") ?? "",
+      appId,
+      verificationToken,
+      encryptKey,
+      nowEpochSeconds: Math.floor(Date.now() / 1000),
+    });
+    if (result.valid) return writeRuntimeSuccess(context, result);
+    switch (result.reason) {
+      case "payload":
+        return writeRuntimeFailure(context, {
+          status: 400,
+          errorCode: "invalid_event_payload",
+          message: "Invalid Feishu event payload.",
+        });
+      case "token":
+      case "signature":
+        return writeRuntimeFailure(context, {
+          status: 401,
+          errorCode: "invalid_webhook_signature",
+          message: "Invalid Feishu event verification token or signature.",
+        });
+      case "app":
+        return writeRuntimeFailure(context, {
+          status: 403,
+          errorCode: "webhook_app_mismatch",
+          message: "The Feishu event app_id does not match the selected connection.",
+        });
+      case "timestamp":
+        return writeRuntimeFailure(context, {
+          status: 401,
+          errorCode: "invalid_webhook_timestamp",
+          message: "The Feishu request timestamp is expired or invalid.",
         });
     }
   });

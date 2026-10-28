@@ -149,6 +149,7 @@ function isPublicPath(path: string, method: string): boolean {
     // middleware must not require a different token.
     (method === "POST" && path === "/v1/providers/slackbot/events/verify") ||
     (method === "POST" && path === "/v1/providers/microsoft_teams_bot/events/verify") ||
+    (method === "POST" && path === "/v1/providers/feishu_app_bot/events/verify") ||
     isConsoleShellRequest(path, method)
   );
 }

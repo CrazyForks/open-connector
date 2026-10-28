@@ -532,6 +532,57 @@ export function createOpenApiDocument(options: OpenApiDocumentOptions = {}): Ope
         },
       },
     },
+    "/v1/providers/feishu_app_bot/events/verify": {
+      post: {
+        tags: ["Triggers"],
+        summary: "Verify and decrypt an inbound Feishu event.",
+        description:
+          "Requires the dedicated OOMOL_CONNECT_EVENT_VERIFY_TOKEN in Authorization. The selected feishu_app_bot connection must contain appId, verificationToken and encryptKey. Signed callers must forward the exact original request bytes; re-serializing the JSON body changes the signed content and fails verification. The route validates the Feishu token and required signature, decrypts encrypted envelopes, and returns the trusted decrypted payload. Only URL verification challenges may omit signing headers. No event is stored or scheduled.",
+        security: [{ eventVerificationToken: [] }],
+        parameters: [
+          { name: "x-lark-request-timestamp", in: "header", required: false, schema: jsonSchema.string() },
+          { name: "x-lark-request-nonce", in: "header", required: false, schema: jsonSchema.string() },
+          { name: "x-lark-signature", in: "header", required: false, schema: jsonSchema.string() },
+          ...namedConnectionParameters,
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+        },
+        responses: {
+          200: jsonResponse(
+            runtimeSuccessSchema({
+              type: "object",
+              properties: {
+                valid: { type: "boolean", const: true },
+                appId: { type: "string" },
+                tenantKey: { type: "string" },
+                challenge: jsonSchema.optional(jsonSchema.string()),
+                payload: jsonSchema.optional({ type: "object", additionalProperties: true }),
+                signatureVerified: { type: "boolean" },
+              },
+              required: ["valid", "appId", "tenantKey", "signatureVerified"],
+            }),
+          ),
+          400: jsonResponse(runtimeFailureSchema(), "invalid_event_payload."),
+          401: jsonResponse(
+            runtimeFailureSchema(),
+            "unauthorized, invalid_webhook_signature, or invalid_webhook_timestamp.",
+          ),
+          403: jsonResponse(runtimeFailureSchema(), "webhook_app_mismatch."),
+          404: jsonResponse(
+            runtimeFailureSchema(),
+            "event_verification_disabled, or the selected connection does not exist.",
+          ),
+          409: jsonResponse(
+            runtimeFailureSchema(),
+            "event_verification_not_configured: appId, verificationToken or encryptKey is missing.",
+          ),
+          413: jsonResponse(runtimeFailureSchema(), "webhook_request_too_large: the body exceeds 64 KiB."),
+          500: jsonResponse(runtimeFailureSchema(), "Internal verification failure."),
+        },
+      },
+    },
     "/v1/providers/{service}/triggers/{triggerId}/execute": {
       post: {
         tags: ["Triggers"],

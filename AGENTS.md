@@ -30,6 +30,14 @@
 - Match existing runtime wire shapes deliberately: catalog index endpoints, action metadata, connection aliases, envelopes, and error codes should stay stable for SDK/CLI clients.
 - If an upstream-compatible field has no local source yet, prefer omitting it or returning a documented empty value from the serializer rather than scattering optional fields in routes.
 
+## Channel Event Verification
+
+- A chat channel that needs an inbound event gateway exposes `POST /v1/providers/{service}/events/verify` and authenticates it only with the dedicated `OOMOL_CONNECT_EVENT_VERIFY_TOKEN`.
+- Resolve the selected Bot connection through `ConnectionService` and keep provider app IDs, signing secrets, verification tokens and encryption keys in that connection. Verification routes must not accept caller-supplied credentials.
+- Return only a validated identity and the minimum trusted event payload. Never return provider secrets, raw authorization headers or unrelated credential values, and never persist or schedule the event in a verify route.
+- URL challenges, signatures, token checks, app ownership and decryption belong in a focused verifier module with direct unit tests plus route tests for disabled auth, missing configuration and one successful event.
+- When a provider credential gains event-verification fields, update `definition.ts`, auth-path allowlisting, OpenAPI documentation and the corresponding generated contracts in the same change.
+
 ## Providers
 
 - Provider code normally lives in `src/providers/<service>/definition.ts`, `actions.ts`, `executors.ts`, and provider-local runtime helper files when needed.

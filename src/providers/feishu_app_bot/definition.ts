@@ -36,6 +36,24 @@ export const provider: ProviderDefinition = {
           description:
             "The Feishu custom app app_secret used to fetch tenant_access_token. Copy it from the app credentials page at https://open.feishu.cn/app.",
         },
+        {
+          key: "verificationToken",
+          label: "Event Verification Token",
+          inputType: "password",
+          required: false,
+          secret: true,
+          description:
+            "Optional Feishu Event Subscription verification token. Required only when this connection verifies inbound channel events through OpenConnector.",
+        },
+        {
+          key: "encryptKey",
+          label: "Event Encrypt Key",
+          inputType: "password",
+          required: false,
+          secret: true,
+          description:
+            "Optional Feishu Event Subscription Encrypt Key. Required with verificationToken when OpenConnector verifies encrypted inbound events.",
+        },
       ],
     },
   ],

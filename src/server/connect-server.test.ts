@@ -29,6 +29,7 @@ import type { IRunLogStore, RunLog, RunLogListInput, RunLogPage } from "./storag
 import type { IRuntimeTokenStore, RuntimeTokenRecord } from "./storage/runtime-token-service.ts";
 
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -143,6 +144,186 @@ afterEach(() => {
 });
 
 describe("ConnectServer", () => {
+  describe("Feishu inbound event verification", () => {
+    const feishuProvider: ProviderDefinition = {
+      service: "feishu_app_bot",
+      displayName: "Feishu App Bot",
+      categories: ["Communication"],
+      authTypes: ["custom_credential"],
+      auth: [
+        {
+          type: "custom_credential",
+          fields: [
+            { key: "appId", label: "App ID", inputType: "text", required: true, secret: false },
+            {
+              key: "verificationToken",
+              label: "Verification Token",
+              inputType: "password",
+              required: false,
+              secret: true,
+            },
+            { key: "encryptKey", label: "Encrypt Key", inputType: "password", required: false, secret: true },
+          ],
+        },
+      ],
+      actions: [],
+    };
+
+    function verify(app: ReturnType<ConnectServer["createApp"]>, body: object) {
+      return app.request("/v1/providers/feishu_app_bot/events/verify", {
+        method: "POST",
+        headers: { authorization: "Bearer verify-token", "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    }
+
+    it("verifies a challenge with the selected Feishu connection", async () => {
+      const app = createTestServer([feishuProvider], { eventVerifyToken: "verify-token" }).createApp();
+      const connection = await app.request("/api/connections/feishu_app_bot", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          authType: "custom_credential",
+          connectionName: "default",
+          values: {
+            appId: "cli_fixture",
+            verificationToken: "feishu-token",
+            encryptKey: "feishu-encrypt-key",
+          },
+        }),
+      });
+      expect(connection.status).toBe(200);
+
+      const response = await verify(app, { type: "url_verification", token: "feishu-token", challenge: "ok" });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        success: true,
+        data: { valid: true, appId: "cli_fixture", challenge: "ok", signatureVerified: false },
+      });
+    });
+
+    it("verifies a signed encrypted event through the route", async () => {
+      const app = createTestServer([feishuProvider], { eventVerifyToken: "verify-token" }).createApp();
+      const values = {
+        appId: "cli_fixture",
+        verificationToken: "feishu-token",
+        encryptKey: "feishu-encrypt-key",
+      };
+      const connection = await app.request("/api/connections/feishu_app_bot", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ authType: "custom_credential", connectionName: "default", values }),
+      });
+      expect(connection.status).toBe(200);
+      const header = {
+        app_id: values.appId,
+        tenant_key: "tenant-1",
+        event_id: "evt-1",
+        event_type: "im.message.receive_v1",
+      };
+      const event = { message: { message_id: "om-1", content: JSON.stringify({ text: "你好" }) } };
+      const iv = randomBytes(16);
+      const cipher = createCipheriv("aes-256-cbc", createHash("sha256").update(values.encryptKey).digest(), iv);
+      const encrypted = Buffer.concat([
+        iv,
+        cipher.update(JSON.stringify({ schema: "2.0", header: { ...header, token: values.verificationToken }, event })),
+        cipher.final(),
+      ]);
+      const body = JSON.stringify({ encrypt: encrypted.toString("base64") }, null, 2);
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const nonce = "fixture-nonce";
+      const signature = createHash("sha256")
+        .update(timestamp + nonce + values.encryptKey)
+        .update(body)
+        .digest("hex");
+
+      const response = await app.request("/v1/providers/feishu_app_bot/events/verify", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer verify-token",
+          "content-type": "application/json",
+          "x-lark-request-timestamp": timestamp,
+          "x-lark-request-nonce": nonce,
+          "x-lark-signature": signature,
+        },
+        body,
+      });
+
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result).toMatchObject({
+        success: true,
+        data: {
+          valid: true,
+          appId: values.appId,
+          tenantKey: "tenant-1",
+          signatureVerified: true,
+          payload: { schema: "2.0", header, event },
+        },
+      });
+      expect(result.data.payload.header).not.toHaveProperty("token");
+      expect(JSON.stringify(result)).not.toContain(values.verificationToken);
+      expect(JSON.stringify(result)).not.toContain(values.encryptKey);
+    });
+
+    it("is disabled without a dedicated verification token", async () => {
+      const app = createTestServer([feishuProvider]).createApp();
+
+      const response = await verify(app, {});
+
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toMatchObject({
+        success: false,
+        errorCode: "event_verification_disabled",
+      });
+    });
+
+    it.each(["verificationToken", "encryptKey"])("rejects a connection without %s", async (missingField) => {
+      const app = createTestServer([feishuProvider], { eventVerifyToken: "verify-token" }).createApp();
+      const connection = await app.request("/api/connections/feishu_app_bot", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          authType: "custom_credential",
+          connectionName: "default",
+          values: {
+            appId: "cli_fixture",
+            verificationToken: missingField === "verificationToken" ? undefined : "feishu-token",
+            encryptKey: missingField === "encryptKey" ? undefined : "feishu-encrypt-key",
+          },
+        }),
+      });
+      expect(connection.status).toBe(200);
+
+      const response = await verify(app, { type: "url_verification", token: "feishu-token", challenge: "ok" });
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        success: false,
+        errorCode: "event_verification_not_configured",
+      });
+    });
+
+    it("requires the dedicated verification token", async () => {
+      const app = createTestServer([feishuProvider], { eventVerifyToken: "verify-token" }).createApp();
+      const response = await app.request("/v1/providers/feishu_app_bot/events/verify", {
+        method: "POST",
+        headers: { authorization: "Bearer wrong", "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(response.status).toBe(401);
+    });
+
+    it("fails closed when the selected Feishu connection is missing", async () => {
+      const app = createTestServer([feishuProvider], { eventVerifyToken: "verify-token" }).createApp();
+
+      const response = await verify(app, { type: "url_verification", token: "feishu-token", challenge: "ok" });
+
+      expect(response.status).toBe(409);
+    });
+  });
+
   describe("Microsoft Teams bot event verification", () => {
     const teamsBotProvider: ProviderDefinition = {
       service: "microsoft_teams_bot",
