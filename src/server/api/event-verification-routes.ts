@@ -1,21 +1,21 @@
 import type { ConnectionService } from "../../connection-service.ts";
 import type { OAuthClientConfigService } from "../../oauth/oauth-client-config-service.ts";
+import type {
+  ChannelCredentialScope,
+  ChannelCredentialSource,
+  ChannelEventRejectionReason,
+  ChannelEventVerifier,
+} from "../event-verification/contract.ts";
+import type { RuntimeFailureInput } from "./runtime-api.ts";
 import type { Context } from "hono";
 
 import { Hono } from "hono";
 import { ConnectionError } from "../../connection-error.ts";
 import { optionalString } from "../../core/cast.ts";
-import { readEventRequestBody } from "../event-request-body.ts";
-import { verifyFeishuEventRequest } from "../feishu-event-verification.ts";
-import { verifySlackEventRequest } from "../slack-event-verification.ts";
-import { BotFrameworkKeysUnavailableError, verifyTeamsBotEventRequest } from "../teams-bot-event-verification.ts";
+import { listChannelEventVerifiers } from "../event-verification/registry.ts";
+import { readEventRequestBody } from "../event-verification/request-body.ts";
 import { readConnectionName } from "./http-utils.ts";
 import { mapConnectionErrorStatus, writeRuntimeFailure, writeRuntimeSuccess } from "./runtime-api.ts";
-
-const teamsBotService = "microsoft_teams_bot";
-const feishuAppBotService = "feishu_app_bot";
-// Authorization carries the dedicated verify token, so the activity's own bearer token is forwarded here.
-const botFrameworkAuthorizationHeader = "x-botframework-authorization";
 
 export interface EventVerificationRoutesOptions {
   connections: ConnectionService;
@@ -23,6 +23,16 @@ export interface EventVerificationRoutesOptions {
   /** Dedicated OOMOL_CONNECT_EVENT_VERIFY_TOKEN, when configured. */
   eventVerifyToken: string | undefined;
 }
+
+/** One HTTP status and error code per rejection reason, identical for every channel. */
+const rejectionFailures: Record<ChannelEventRejectionReason, Pick<RuntimeFailureInput, "status" | "errorCode">> = {
+  payload: { status: 400, errorCode: "invalid_event_payload" },
+  signature: { status: 401, errorCode: "invalid_webhook_signature" },
+  timestamp: { status: 401, errorCode: "invalid_webhook_timestamp" },
+  app: { status: 403, errorCode: "webhook_app_mismatch" },
+  body_too_large: { status: 413, errorCode: "webhook_request_too_large" },
+  unavailable: { status: 502, errorCode: "event_verification_unavailable" },
+};
 
 /**
  * Checks the dedicated event verification bearer token. Returns the failure
@@ -50,7 +60,14 @@ async function rejectUnauthorizedEventVerification(
   return undefined;
 }
 
-/** Inbound provider event verification using a dedicated bearer token. */
+/**
+ * Inbound channel event verification using a dedicated bearer token.
+ *
+ * One handler serves every channel in the verifier registry: it checks the token,
+ * loads the channel's credential from its declared scope, enforces the body
+ * limit, and maps the verifier's outcome to the runtime envelope. Nothing is
+ * stored or scheduled.
+ */
 export function createEventVerificationRoutes({
   connections,
   oauthClientConfigs,
@@ -58,240 +75,71 @@ export function createEventVerificationRoutes({
 }: EventVerificationRoutesOptions): Hono {
   const app = new Hono();
 
-  app.post("/providers/slackbot/events/verify", async (context) => {
+  async function readCredentialSource(
+    context: Context,
+    service: string,
+    scope: ChannelCredentialScope,
+  ): Promise<ChannelCredentialSource> {
+    if (scope === "application") return { applicationConfig: await oauthClientConfigs.getConfig(service) };
+    const connection = await connections.resolveConnection(
+      service,
+      readConnectionName(context),
+      optionalString(context.req.header("x-oo-connector-app-id")),
+    );
+    return {
+      connectionValues:
+        connection.source === "local" && connection.credential?.authType === "custom_credential"
+          ? connection.credential.values
+          : undefined,
+    };
+  }
+
+  async function verifyChannelEvent(
+    context: Context,
+    service: string,
+    loadVerifier: () => Promise<ChannelEventVerifier<unknown>>,
+  ): Promise<Response> {
     const rejected = await rejectUnauthorizedEventVerification(context, eventVerifyToken);
     if (rejected) return rejected;
-    const config = await oauthClientConfigs.getConfig("slackbot");
-    const appId = String(config?.extra?.appId ?? "").trim();
-    const signingSecret = String(config?.secretExtra?.signingSecret ?? "").trim();
-    if (!appId || !signingSecret)
-      return writeRuntimeFailure(context, {
-        status: 409,
-        errorCode: "event_verification_not_configured",
-        message: "Configure the default Slack App ID and Signing Secret.",
-      });
-    const rawBody = await readEventRequestBody(context.req.raw);
-    if (!rawBody)
-      return writeRuntimeFailure(context, {
-        status: 413,
-        errorCode: "webhook_request_too_large",
-        message: "Slack request body exceeds 64 KiB.",
-      });
-    const result = await verifySlackEventRequest({
-      timestamp: context.req.header("x-slack-request-timestamp") ?? "",
-      signature: context.req.header("x-slack-signature") ?? "",
-      rawBody,
-      configuredAppId: appId,
-      signingSecret,
-      contentType: context.req.header("content-type") ?? "",
-    });
-    if (!result.valid) {
-      switch (result.reason) {
-        case "body_too_large":
-          return writeRuntimeFailure(context, {
-            status: 413,
-            errorCode: "webhook_request_too_large",
-            message: "Slack request body exceeds 64 KiB.",
-          });
-        case "payload":
-          return writeRuntimeFailure(context, {
-            status: 400,
-            errorCode: "invalid_event_payload",
-            message: "Invalid Slack event envelope.",
-          });
-        case "app":
-          return writeRuntimeFailure(context, {
-            status: 403,
-            errorCode: "webhook_app_mismatch",
-            message: "Slack App ID does not match the configured application.",
-          });
-        case "timestamp":
-          return writeRuntimeFailure(context, {
-            status: 401,
-            errorCode: "invalid_webhook_timestamp",
-            message: "Invalid or expired Slack request timestamp.",
-          });
-        case "signature":
-          return writeRuntimeFailure(context, {
-            status: 401,
-            errorCode: "invalid_webhook_signature",
-            message: "Invalid Slack request signature.",
-          });
-      }
-    }
-    return writeRuntimeSuccess(context, result);
-  });
+    const verifier = await loadVerifier();
 
-  app.post(`/providers/${teamsBotService}/events/verify`, async (context) => {
-    const rejected = await rejectUnauthorizedEventVerification(context, eventVerifyToken);
-    if (rejected) return rejected;
-
-    let appId: string | undefined;
+    let source: ChannelCredentialSource;
     try {
-      const connection = await connections.resolveConnection(
-        teamsBotService,
-        readConnectionName(context),
-        optionalString(context.req.header("x-oo-connector-app-id")),
-      );
-      if (connection.source === "local" && connection.credential?.authType === "custom_credential")
-        appId = optionalString(connection.credential.values.appId);
+      source = await readCredentialSource(context, service, verifier.credentialScope);
     } catch (error) {
-      if (error instanceof ConnectionError)
-        return writeRuntimeFailure(context, {
-          status: mapConnectionErrorStatus(error),
-          errorCode: error.code,
-          message: error.message,
-        });
-      throw error;
+      if (!(error instanceof ConnectionError)) throw error;
+      return writeRuntimeFailure(context, {
+        status: mapConnectionErrorStatus(error),
+        errorCode: error.code,
+        message: error.message,
+      });
     }
-    if (!appId)
+    const credential = verifier.readCredential(source);
+    if (credential === undefined)
       return writeRuntimeFailure(context, {
         status: 409,
         errorCode: "event_verification_not_configured",
-        message: "Connect a Microsoft Teams Bot account with its Application (client) ID first.",
+        message: verifier.messages.notConfigured,
       });
 
     const rawBody = await readEventRequestBody(context.req.raw);
     if (!rawBody)
       return writeRuntimeFailure(context, {
-        status: 413,
-        errorCode: "webhook_request_too_large",
-        message: "Teams request body exceeds 64 KiB.",
+        ...rejectionFailures.body_too_large,
+        message: verifier.messages.bodyTooLarge,
       });
 
-    let result: Awaited<ReturnType<typeof verifyTeamsBotEventRequest>>;
-    try {
-      result = await verifyTeamsBotEventRequest({
-        authorization: context.req.header(botFrameworkAuthorizationHeader) ?? "",
-        rawBody,
-        appId,
-      });
-    } catch (error) {
-      if (!(error instanceof BotFrameworkKeysUnavailableError)) throw error;
-      return writeRuntimeFailure(context, {
-        status: 502,
-        errorCode: "event_verification_unavailable",
-        message: "Bot Framework signing keys are unavailable.",
-      });
-    }
-    if (result.valid) return writeRuntimeSuccess(context, result);
-    switch (result.reason) {
-      case "body_too_large":
-        return writeRuntimeFailure(context, {
-          status: 413,
-          errorCode: "webhook_request_too_large",
-          message: "Teams request body exceeds 64 KiB.",
-        });
-      case "payload":
-        return writeRuntimeFailure(context, {
-          status: 400,
-          errorCode: "invalid_event_payload",
-          message: "Invalid Teams activity.",
-        });
-      case "app":
-        return writeRuntimeFailure(context, {
-          status: 403,
-          errorCode: "webhook_app_mismatch",
-          message: "The token audience does not match the selected bot.",
-        });
-      case "timestamp":
-        return writeRuntimeFailure(context, {
-          status: 401,
-          errorCode: "invalid_webhook_timestamp",
-          message: "The Bot Framework token is expired or not yet valid.",
-        });
-      case "token":
-      case "service_url":
-      case "channel":
-        return writeRuntimeFailure(context, {
-          status: 401,
-          errorCode: "invalid_webhook_signature",
-          message: "Invalid Bot Framework token.",
-        });
-    }
-  });
+    const verification = await verifier.verify(
+      { headers: context.req.raw.headers, rawBody, now: Date.now() },
+      credential,
+    );
+    if (verification.verified) return writeRuntimeSuccess(context, verification.result);
+    return writeRuntimeFailure(context, { ...rejectionFailures[verification.reason], message: verification.message });
+  }
 
-  app.post(`/providers/${feishuAppBotService}/events/verify`, async (context) => {
-    const rejected = await rejectUnauthorizedEventVerification(context, eventVerifyToken);
-    if (rejected) return rejected;
-
-    let appId: string | undefined;
-    let verificationToken: string | undefined;
-    let encryptKey: string | undefined;
-    try {
-      const connection = await connections.resolveConnection(
-        feishuAppBotService,
-        readConnectionName(context),
-        optionalString(context.req.header("x-oo-connector-app-id")),
-      );
-      if (connection.source === "local" && connection.credential?.authType === "custom_credential") {
-        appId = optionalString(connection.credential.values.appId);
-        verificationToken = optionalString(connection.credential.values.verificationToken);
-        encryptKey = optionalString(connection.credential.values.encryptKey);
-      }
-    } catch (error) {
-      if (error instanceof ConnectionError)
-        return writeRuntimeFailure(context, {
-          status: mapConnectionErrorStatus(error),
-          errorCode: error.code,
-          message: error.message,
-        });
-      throw error;
-    }
-    if (!appId || !verificationToken || !encryptKey)
-      return writeRuntimeFailure(context, {
-        status: 409,
-        errorCode: "event_verification_not_configured",
-        message: "Connect a Feishu App Bot with appId, verificationToken and encryptKey first.",
-      });
-
-    const rawBody = await readEventRequestBody(context.req.raw);
-    if (!rawBody)
-      return writeRuntimeFailure(context, {
-        status: 413,
-        errorCode: "webhook_request_too_large",
-        message: "Feishu request body exceeds 64 KiB.",
-      });
-
-    const result = await verifyFeishuEventRequest({
-      rawBody,
-      timestamp: context.req.header("x-lark-request-timestamp") ?? "",
-      nonce: context.req.header("x-lark-request-nonce") ?? "",
-      signature: context.req.header("x-lark-signature") ?? "",
-      appId,
-      verificationToken,
-      encryptKey,
-      nowEpochSeconds: Math.floor(Date.now() / 1000),
-    });
-    if (result.valid) return writeRuntimeSuccess(context, result);
-    switch (result.reason) {
-      case "payload":
-        return writeRuntimeFailure(context, {
-          status: 400,
-          errorCode: "invalid_event_payload",
-          message: "Invalid Feishu event payload.",
-        });
-      case "token":
-      case "signature":
-        return writeRuntimeFailure(context, {
-          status: 401,
-          errorCode: "invalid_webhook_signature",
-          message: "Invalid Feishu event verification token or signature.",
-        });
-      case "app":
-        return writeRuntimeFailure(context, {
-          status: 403,
-          errorCode: "webhook_app_mismatch",
-          message: "The Feishu event app_id does not match the selected connection.",
-        });
-      case "timestamp":
-        return writeRuntimeFailure(context, {
-          status: 401,
-          errorCode: "invalid_webhook_timestamp",
-          message: "The Feishu request timestamp is expired or invalid.",
-        });
-    }
-  });
+  // One concrete path per channel, so each route is documented and contract-tested individually.
+  for (const [service, loadVerifier] of listChannelEventVerifiers())
+    app.post(`/providers/${service}/events/verify`, (context) => verifyChannelEvent(context, service, loadVerifier));
 
   return app;
 }

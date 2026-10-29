@@ -20,7 +20,7 @@ through runtime options to admit, delay or deny each upstream HTTP attempt.
 | `OOMOL_CONNECT_NEW_ENCRYPTION_KEY`          | unset                     | New key used by `runtime:data rotate-key`.                                                                                                                                  |
 | `OOMOL_CONNECT_ADMIN_TOKEN`                 | unset                     | Requires bearer-token auth for local admin API, docs, and web console.                                                                                                      |
 | `OOMOL_CONNECT_RUNTIME_TOKEN`               | unset                     | Optional bootstrap runtime bearer token for `/v1` and MCP callers.                                                                                                          |
-| `OOMOL_CONNECT_EVENT_VERIFY_TOKEN`          | unset                     | Dedicated bearer token for the `slackbot` and `microsoft_teams_bot` `/events/verify` routes. When unset they return 404. Separate from the admin and runtime tokens.        |
+| `OOMOL_CONNECT_EVENT_VERIFY_TOKEN`          | unset                     | Dedicated bearer token for the `slackbot`, `microsoft_teams_bot` and `feishu_app_bot` `/events/verify` routes; they return 404 when unset. Not an admin/runtime token.      |
 | `OOMOL_CONNECT_ALLOWED_CUSTOM_OAUTH`        | unset                     | Enables connection-scoped OAuth apps for `*` or a comma-separated service list.                                                                                             |
 | `OOMOL_CONNECT_JWKS_URI`                    | unset                     | Node-only JWKS endpoint for validating runtime JWT access tokens.                                                                                                           |
 | `OOMOL_CONNECT_JWT_ISSUER`                  | unset                     | Expected `iss` claim for runtime JWT access tokens.                                                                                                                         |
@@ -308,6 +308,18 @@ npx wrangler secret put OOMOL_CONNECT_ENCRYPTION_KEY --config wrangler.local.jso
 
 Persistent runtime tokens need explicit `allowedTriggers` grants for Provider Triggers; old and new tokens default to no Trigger access. Trigger grants do not require `allowedProxies`. Stateful subscriptions require a persistent runtime token; environment tokens and verified JWTs support only permitted `options` and `read`. See [Provider Triggers](runtime-api.md#provider-triggers) for lifecycle, cleanup, account recovery and token rotation. Workers must have scheduled maintenance enabled and catalog assets available when Trigger cleanup is pending.
 
+## Channel event verification
+
+`slackbot`, `microsoft_teams_bot` and `feishu_app_bot` expose `POST /v1/providers/{service}/events/verify`. The ingress service that receives a channel's events forwards each original request there, and the route proves that the request came from the configured application. All three routes share these rules:
+
+- Authentication uses only `OOMOL_CONNECT_EVENT_VERIFY_TOKEN`. The routes return 404 when the token is unset, and admin or runtime tokens are rejected.
+- Forward the original request body and the provider headers. Slack and Feishu sign the body, so forward the exact bytes: re-serialized JSON fails their signature checks. Teams does not sign the body. It needs a valid activity whose `serviceUrl` matches the forwarded Bot Framework token.
+- The body limit is 64 KiB.
+- Verification never stores, deduplicates, retries or schedules an event. Your ingress owns those steps and sends any challenge reply to the platform.
+- Errors use one table of codes, listed in each section below.
+
+The sections below describe each channel. For the architecture and the steps to add a channel, see [Channel Event Verification](channel-event-verification.md).
+
 ## Slack event verification
 
 Configure the default Slack Bot OAuth application in the console with its Client ID and Client Secret. Its optional **Slack App ID** and **Slack Signing Secret** fields enable event verification; they are not required for OAuth authorization or ordinary actions. The Signing Secret belongs to the Slack application, not to each workspace installation.
@@ -420,3 +432,70 @@ Use the returned `serviceUrl` for replies. `tenantId`, `activityId`, `conversati
 | 502  | `event_verification_unavailable`    | Bot Framework signing keys could not be fetched             |
 
 Signing keys are cached for an hour and refetched when a token names an unknown key; a failed refresh keeps serving the keys already held. Government-cloud tokens (issuer `https://api.botframework.us`) are verified against that cloud's published keys.
+
+## Feishu App Bot event verification
+
+Connect a Feishu App Bot with its **App ID**, **Event Verification Token** and **Event Encrypt Key**. The last two come from the app's Event Subscription settings and are needed only for event verification. Then set `OOMOL_CONNECT_EVENT_VERIFY_TOKEN` as described for Slack. Forward the original body together with Feishu's signing headers:
+
+```http
+POST /v1/providers/feishu_app_bot/events/verify
+Authorization: Bearer <event-verify-token>
+X-Lark-Request-Timestamp: <original-timestamp>
+X-Lark-Request-Nonce: <original-nonce>
+X-Lark-Signature: <original-signature>
+X-OO-Connector-App-Id: <connection id>
+Content-Type: application/json
+
+<original Feishu request body, without re-serialization>
+```
+
+The bot is selected like it is for Actions: by `X-OO-Connector-App-Id`, or by an alias in `X-OO-Connector-Alias`. An unknown selector never falls back to another bot.
+
+The verifier checks these things:
+
+- The Feishu verification token.
+- The signature, `SHA-256(timestamp + nonce + encryptKey + body)`. The timestamp may differ from server time by at most 300 seconds.
+- That the event's `app_id` is the connection's App ID.
+- The envelope. Encrypted envelopes are decrypted with the Encrypt Key.
+
+Every event must be signed. Only a URL verification challenge may omit the signing headers, and that challenge returns `signatureVerified: false`.
+
+A verified event returns the decrypted envelope. The verification token is removed from the response:
+
+```json
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "valid": true,
+    "appId": "cli_a0123456789",
+    "tenantKey": "tenant-key",
+    "signatureVerified": true,
+    "payload": {
+      "schema": "2.0",
+      "header": {
+        "event_id": "event-id",
+        "event_type": "im.message.receive_v1",
+        "tenant_key": "tenant-key",
+        "app_id": "cli_a0123456789"
+      },
+      "event": {}
+    }
+  },
+  "meta": {}
+}
+```
+
+For `url_verification`, `challenge` contains the validated string, and your ingress must send that reply to Feishu. Feishu retries a delivery that did not receive HTTP 200 within three seconds. Deduplicate events by `header.event_id`.
+
+| HTTP | errorCode                           | Meaning                                                        |
+| ---- | ----------------------------------- | -------------------------------------------------------------- |
+| 400  | `invalid_event_payload`             | Invalid JSON, decryption failure, or unsupported envelope      |
+| 401  | `unauthorized`                      | Missing or incorrect dedicated token                           |
+| 401  | `invalid_webhook_signature`         | Wrong verification token, or missing or invalid signature      |
+| 401  | `invalid_webhook_timestamp`         | Timestamp is invalid or outside the 300 second window          |
+| 403  | `webhook_app_mismatch`              | The event's `app_id` is a different app                        |
+| 404  | `event_verification_disabled`       | No verification token configured                               |
+| 404  | `connection_not_found`              | The selected connection does not exist                         |
+| 409  | `event_verification_not_configured` | The connection lacks App ID, verification token or Encrypt Key |
+| 413  | `webhook_request_too_large`         | Body exceeds 64 KiB                                            |

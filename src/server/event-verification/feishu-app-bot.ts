@@ -1,11 +1,58 @@
-import type { JsonValue } from "../triggers/common/types.ts";
+import type { JsonValue } from "../../triggers/common/types.ts";
+import type { ChannelEventVerifier } from "./contract.ts";
 
-import { optionalString } from "../core/cast.ts";
-import { isJsonObject } from "../triggers/common/json.ts";
+import { optionalString } from "../../core/cast.ts";
+import { isJsonObject } from "../../triggers/common/json.ts";
+import { sameSecret } from "../../triggers/signature.ts";
+import {
+  decryptFeishuEnvelope,
+  feishuRequestSignature,
+  isFeishuCiphertext,
+} from "../../triggers/sources/feishu-envelope.ts";
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const signatureMaximumSkewSeconds = 300;
+
+interface FeishuAppCredential {
+  appId: string;
+  verificationToken: string;
+  encryptKey: string;
+}
+
+const rejectionMessages = {
+  payload: "Invalid Feishu event payload.",
+  signature: "Invalid Feishu event verification token or signature.",
+  app: "The Feishu event app_id does not match the selected connection.",
+  timestamp: "The Feishu request timestamp is expired or invalid.",
+};
+
+/** Feishu App Bot events, verified with the app credentials on the selected connection. */
+export const feishuAppBotEventVerifier: ChannelEventVerifier<FeishuAppCredential> = {
+  credentialScope: "connection",
+  messages: {
+    notConfigured: "Connect a Feishu App Bot with appId, verificationToken and encryptKey first.",
+    bodyTooLarge: "Feishu request body exceeds 64 KiB.",
+  },
+  readCredential({ connectionValues }) {
+    const appId = optionalString(connectionValues?.appId);
+    const verificationToken = optionalString(connectionValues?.verificationToken);
+    const encryptKey = optionalString(connectionValues?.encryptKey);
+    return appId && verificationToken && encryptKey ? { appId, verificationToken, encryptKey } : undefined;
+  },
+  async verify(request, credential) {
+    const result = await verifyFeishuEventRequest({
+      rawBody: request.rawBody,
+      timestamp: request.headers.get("x-lark-request-timestamp") ?? "",
+      nonce: request.headers.get("x-lark-request-nonce") ?? "",
+      signature: request.headers.get("x-lark-signature") ?? "",
+      ...credential,
+      nowEpochSeconds: Math.floor(request.now / 1000),
+    });
+    if (result.valid) return { verified: true, result };
+    const reason = result.reason === "token" ? "signature" : result.reason;
+    return { verified: false, reason, message: rejectionMessages[reason] };
+  },
+};
 
 export interface FeishuEventVerificationInput {
   /** Raw Feishu request body; signatures must use these exact bytes. */
@@ -65,8 +112,7 @@ export async function verifyFeishuEventRequest(
 
   const type = optionalString(decrypted.type);
   if (type === "url_verification") {
-    if (!sameSecret(optionalString(decrypted.token) ?? "", input.verificationToken))
-      return { valid: false, reason: "token" };
+    if (!sameSecret(optionalString(decrypted.token), input.verificationToken)) return { valid: false, reason: "token" };
     const challenge = optionalString(decrypted.challenge);
     if (!challenge || challenge.length > 1024) return { valid: false, reason: "payload" };
     return {
@@ -81,10 +127,10 @@ export async function verifyFeishuEventRequest(
   if (signature !== "verified") return { valid: false, reason: "signature" };
   if (decrypted.schema != "2.0") return { valid: false, reason: "payload" };
   const header = isJsonObject(decrypted.header) ? decrypted.header : undefined;
-  if (!header || !sameSecret(optionalString(header.token) ?? "", input.verificationToken))
+  if (!header || !sameSecret(optionalString(header.token), input.verificationToken))
     return { valid: false, reason: "token" };
-  const appId = optionalString(header.app_id) ?? optionalString(decrypted.app_id) ?? "";
-  if (!sameSecret(appId, input.appId)) return { valid: false, reason: "app" };
+  const appId = optionalString(header.app_id) ?? optionalString(decrypted.app_id);
+  if (!appId || !sameSecret(appId, input.appId)) return { valid: false, reason: "app" };
   const tenantKey = optionalString(header.tenant_key) ?? "";
   if (!tenantKey || tenantKey.length > 256) return { valid: false, reason: "payload" };
   const eventType = optionalString(header.event_type);
@@ -106,22 +152,12 @@ async function decryptIfNeeded(
   envelope: Record<string, JsonValue>,
   encryptKey: string,
 ): Promise<Record<string, JsonValue> | undefined> {
-  const encrypted = optionalString(envelope.encrypt);
-  if (!encrypted) return envelope;
-  if (!encryptKey || !/^[A-Za-z0-9+/]+={0,2}$/.test(encrypted)) return undefined;
+  // Plaintext mode applies only when `encrypt` is absent; a present but malformed value is rejected.
+  if (!Object.hasOwn(envelope, "encrypt")) return envelope;
+  const encrypted = envelope.encrypt;
+  if (!encryptKey || !isFeishuCiphertext(encrypted)) return undefined;
   try {
-    const bytes = Uint8Array.from(atob(encrypted), (character) => character.charCodeAt(0));
-    if (bytes.length < 32 || bytes.length % 16 !== 0) return undefined;
-    const key = await crypto.subtle.importKey(
-      "raw",
-      await crypto.subtle.digest("SHA-256", encoder.encode(encryptKey)),
-      "AES-CBC",
-      false,
-      ["decrypt"],
-    );
-    const plain = await crypto.subtle.decrypt({ name: "AES-CBC", iv: bytes.slice(0, 16) }, key, bytes.slice(16));
-    const parsed: unknown = JSON.parse(decoder.decode(plain));
-    return isJsonObject(parsed) ? parsed : undefined;
+    return await decryptFeishuEnvelope(encrypted, encryptKey);
   } catch {
     return undefined;
   }
@@ -142,19 +178,6 @@ async function verifySignatureIfPresent(
     Math.abs(input.nowEpochSeconds - timestampSeconds) > signatureMaximumSkewSeconds
   )
     return "timestamp";
-  const prefix = encoder.encode(input.timestamp + input.nonce + encryptKey);
-  const signed = new Uint8Array(prefix.length + rawBody.length);
-  signed.set(prefix);
-  signed.set(rawBody, prefix.length);
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", signed));
-  const expected = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const expected = await feishuRequestSignature(input.timestamp, input.nonce, encryptKey, rawBody);
   return sameSecret(input.signature, expected) ? "verified" : "signature";
-}
-
-function sameSecret(provided: string, expected: string): boolean {
-  if (!provided || !expected || provided.length !== expected.length) return false;
-  let difference = 0;
-  for (let index = 0; index < expected.length; index += 1)
-    difference |= provided.charCodeAt(index) ^ expected.charCodeAt(index);
-  return difference === 0;
 }

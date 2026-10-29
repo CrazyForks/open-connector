@@ -3,6 +3,7 @@ import type { RuntimeJwtVerifier } from "./runtime-jwt.ts";
 import type { Context, MiddlewareHandler } from "hono";
 
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { isChannelEventVerifyRequest } from "../event-verification/registry.ts";
 import { isConsoleShellRequest } from "./console-paths.ts";
 import { jsonError } from "./http-utils.ts";
 import { writeRuntimeFailure } from "./runtime-api.ts";
@@ -145,11 +146,9 @@ function isPublicPath(path: string, method: string): boolean {
     (method === "GET" && path === "/api/auth/session") ||
     (method === "POST" && path === "/api/auth/logout") ||
     (method === "GET" && path.startsWith("/api/files/")) ||
-    // This route performs its own dedicated bearer check; the global admin/runtime
-    // middleware must not require a different token.
-    (method === "POST" && path === "/v1/providers/slackbot/events/verify") ||
-    (method === "POST" && path === "/v1/providers/microsoft_teams_bot/events/verify") ||
-    (method === "POST" && path === "/v1/providers/feishu_app_bot/events/verify") ||
+    // Channel verify routes perform their own dedicated bearer check; the global
+    // admin/runtime middleware must not require a different token.
+    isChannelEventVerifyRequest(path, method) ||
     isConsoleShellRequest(path, method)
   );
 }

@@ -46,6 +46,9 @@ Generated `src/providers/registry*.generated.ts`, `src/providers/action-contract
 If you use an agent to add providers, the optional workflow in
 [.codex/skills/add-provider/SKILL.md](.codex/skills/add-provider/SKILL.md) follows the same rules.
 
+To let a chat channel's inbound events be verified through OpenConnector, follow
+[Channel Event Verification](docs/channel-event-verification.md#adding-a-channel).
+
 ## Third-Party Rights
 
 Do not contribute third-party logos, icons, screenshots, documentation excerpts, API schemas, or

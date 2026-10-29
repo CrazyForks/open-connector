@@ -1,5 +1,53 @@
-import { verifySlackSignature } from "../triggers/sources/slack-signature.ts";
-import { eventRequestMaximumBodyBytes } from "./event-request-body.ts";
+import type { ChannelEventVerifier } from "./contract.ts";
+
+import { optionalString } from "../../core/cast.ts";
+import { verifySlackSignature } from "../../triggers/sources/slack-signature.ts";
+import { eventRequestMaximumBodyBytes } from "./request-body.ts";
+
+interface SlackApplicationCredential {
+  appId: string;
+  signingSecret: string;
+}
+
+const rejectionMessages = {
+  body_too_large: "Slack request body exceeds 64 KiB.",
+  payload: "Invalid Slack event envelope.",
+  app: "Slack App ID does not match the configured application.",
+  timestamp: "Invalid or expired Slack request timestamp.",
+  signature: "Invalid Slack request signature.",
+};
+
+/**
+ * Slack signs every delivery of one Slack App with that app's Signing Secret,
+ * across all workspaces it is installed in, so the secret is read from the
+ * deployment-default slackbot OAuth application rather than a connection.
+ */
+export const slackbotEventVerifier: ChannelEventVerifier<SlackApplicationCredential> = {
+  credentialScope: "application",
+  messages: {
+    notConfigured: "Configure the default Slack App ID and Signing Secret.",
+    bodyTooLarge: rejectionMessages.body_too_large,
+  },
+  readCredential({ applicationConfig }) {
+    const appId = optionalString(applicationConfig?.extra.appId);
+    const signingSecret = optionalString(applicationConfig?.secretExtra.signingSecret);
+    return appId && signingSecret ? { appId, signingSecret } : undefined;
+  },
+  async verify(request, credential) {
+    const result = await verifySlackEventRequest({
+      timestamp: request.headers.get("x-slack-request-timestamp") ?? "",
+      signature: request.headers.get("x-slack-signature") ?? "",
+      rawBody: request.rawBody,
+      configuredAppId: credential.appId,
+      signingSecret: credential.signingSecret,
+      contentType: request.headers.get("content-type") ?? "",
+      now: request.now,
+    });
+    return result.valid
+      ? { verified: true, result }
+      : { verified: false, reason: result.reason, message: rejectionMessages[result.reason] };
+  },
+};
 
 export interface SlackEventVerificationInput {
   /** Value of the X-Slack-Request-Timestamp header. */

@@ -1,9 +1,13 @@
 import type { JsonValue } from "../common/types.ts";
 
+import { optionalRawString } from "../../core/cast.ts";
 import { isJsonObject } from "../common/json.ts";
+import { sameSecret } from "../signature.ts";
+import { decryptFeishuEnvelope, feishuRequestSignature, isFeishuCiphertext } from "./feishu-envelope.ts";
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
+/** Feishu retries failed deliveries for hours; until retry re-signing is confirmed, the source accepts a day of skew. */
+const signatureMaximumAgeMs = 86_400_000;
 
 export interface FeishuEvent {
   readonly id: string;
@@ -21,28 +25,12 @@ export async function receiveFeishuEvent(
   now: number,
 ): Promise<{ readonly challenge: string } | { readonly event: FeishuEvent }> {
   const envelope: unknown = JSON.parse(decoder.decode(rawBody));
-  if (
-    !isJsonObject(envelope) ||
-    typeof envelope.encrypt != "string" ||
-    !/^[A-Za-z0-9+/]+={0,2}$/.test(envelope.encrypt)
-  ) {
+  if (!isJsonObject(envelope) || !isFeishuCiphertext(envelope.encrypt)) {
     throw new TypeError("An encrypted Feishu envelope is required.");
   }
-  const bytes = Uint8Array.from(atob(envelope.encrypt), (character) => character.charCodeAt(0));
-  if (bytes.length < 32 || bytes.length % 16 != 0) throw new TypeError("Invalid encrypted Feishu envelope.");
-  const key = await crypto.subtle.importKey(
-    "raw",
-    await crypto.subtle.digest("SHA-256", encoder.encode(source.encryptKey)),
-    "AES-CBC",
-    false,
-    ["decrypt"],
-  );
-  const value: unknown = JSON.parse(
-    decoder.decode(await crypto.subtle.decrypt({ name: "AES-CBC", iv: bytes.slice(0, 16) }, key, bytes.slice(16))),
-  );
-  if (!isJsonObject(value)) throw new TypeError("Invalid Feishu event.");
+  const value = await decryptFeishuEnvelope(envelope.encrypt, source.encryptKey);
   const header = isJsonObject(value.header) ? value.header : undefined;
-  if (!sameSecret(header?.token ?? value.token, source.verificationToken))
+  if (!sameSecret(optionalRawString(header?.token ?? value.token), source.verificationToken))
     throw new TypeError("Invalid Feishu verification token.");
   if (value.type == "url_verification") {
     if (typeof value.challenge != "string" || value.challenge.length == 0 || value.challenge.length > 1024)
@@ -54,19 +42,14 @@ export async function receiveFeishuEvent(
   const signature = headers.get("x-lark-signature") ?? "";
   if (
     !/^\d{10}$/.test(timestamp) ||
-    Math.abs(now - Number(timestamp) * 1000) > 86_400_000 ||
+    Math.abs(now - Number(timestamp) * 1000) > signatureMaximumAgeMs ||
     nonce.length == 0 ||
     nonce.length > 256
   ) {
     throw new TypeError("Invalid Feishu request identity.");
   }
-  const prefix = encoder.encode(timestamp + nonce + source.encryptKey);
-  const signed = new Uint8Array(prefix.length + rawBody.length);
-  signed.set(prefix);
-  signed.set(rawBody, prefix.length);
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", signed));
-  const hex = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
-  if (!sameSecret(signature, hex)) throw new TypeError("Invalid Feishu signature.");
+  const expected = await feishuRequestSignature(timestamp, nonce, source.encryptKey, rawBody);
+  if (!sameSecret(signature, expected)) throw new TypeError("Invalid Feishu signature.");
   const body = value.event;
   if (!isJsonObject(body)) throw new TypeError("Missing Feishu event body.");
   if (value.schema != null && value.schema != "2.0") throw new TypeError("Unsupported Feishu event schema.");
@@ -101,14 +84,6 @@ export async function receiveFeishuEvent(
       body: business,
     },
   };
-}
-
-function sameSecret(value: unknown, expected: string): boolean {
-  if (typeof value != "string" || value.length != expected.length) return false;
-  let difference = 0;
-  for (let index = 0; index < expected.length; index += 1)
-    difference |= value.charCodeAt(index) ^ expected.charCodeAt(index);
-  return difference == 0;
 }
 
 export function matchesFeishuEvent(

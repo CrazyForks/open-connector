@@ -110,6 +110,8 @@ Verify RFC 8707 resource indicators independently at the authorization and token
 
 Add `credentialValidators` in `executors.ts` when the provider can cheaply verify credentials and return a useful `CredentialProfile`. Use a stable account id and readable display name when the provider exposes them.
 
+If a chat channel must verify inbound events (`/v1/providers/<service>/events/verify`), do not add a route. Write one `ChannelEventVerifier`, register it in `src/server/event-verification/registry.ts`, and follow the checklist in [docs/channel-event-verification.md](../../../docs/channel-event-verification.md#adding-a-channel).
+
 ## Executors
 
 Create or update `executors.ts` with `ProviderExecutors`:

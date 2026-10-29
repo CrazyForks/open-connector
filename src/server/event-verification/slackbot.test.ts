@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { verifySlackEventRequest } from "./slack-event-verification.ts";
+import { verifySlackEventRequest } from "./slackbot.ts";
 
 const secret = "fixture-signing-secret";
 const timestamp = "1700000000";

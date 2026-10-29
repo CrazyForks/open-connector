@@ -32,11 +32,17 @@
 
 ## Channel Event Verification
 
+[docs/channel-event-verification.md](docs/channel-event-verification.md) describes the architecture and the step-by-step checklist for adding a channel.
+
 - A chat channel that needs an inbound event gateway exposes `POST /v1/providers/{service}/events/verify` and authenticates it only with the dedicated `OOMOL_CONNECT_EVENT_VERIFY_TOKEN`.
-- Resolve the selected Bot connection through `ConnectionService` and keep provider app IDs, signing secrets, verification tokens and encryption keys in that connection. Verification routes must not accept caller-supplied credentials.
-- Return only a validated identity and the minimum trusted event payload. Never return provider secrets, raw authorization headers or unrelated credential values, and never persist or schedule the event in a verify route.
-- URL challenges, signatures, token checks, app ownership and decryption belong in a focused verifier module with direct unit tests plus route tests for disabled auth, missing configuration and one successful event.
-- When a provider credential gains event-verification fields, update `definition.ts`, auth-path allowlisting, OpenAPI documentation and the corresponding generated contracts in the same change.
+- Add a channel as one `ChannelEventVerifier` in `src/server/event-verification/<service>.ts` and register it in `src/server/event-verification/registry.ts`. The route and the auth exemption derive from the registry, and the error mapping is one shared table in `event-verification-routes.ts`. Do not add a per-channel route handler, a per-channel `isPublicPath` entry, or a local status/error-code switch.
+- The shared route owns the token check, the credential lookup, the 64 KiB body limit and the mapping from rejection reason to HTTP status and error code. A verifier owns only its protocol: credential fields, signature/token checks, decryption, app ownership and its success payload.
+- Keep verification credentials where the provider's protocol puts them, and never accept them from the caller. Use `credentialScope: "connection"` when one app maps to one Bot connection; the route resolves that connection through `ConnectionService`. Use `"application"` only when one app signs deliveries for many installations, as Slack does, so no connection can be chosen before verification.
+- Return only a validated identity and the minimum trusted event payload. Never return provider secrets, raw authorization headers or unrelated credential values, and never persist, deduplicate or schedule the event in a verify route.
+- When a channel also has a Trigger source, both must import one protocol module for signatures and envelopes (see `slack-signature.ts` and `feishu-envelope.ts` under `src/triggers/sources/`). Reuse `src/triggers/signature.ts` for constant-time comparison and HMAC rather than declaring a local copy.
+- Fetch signing keys and metadata through `createGuardedFetch` from `src/core/guarded-fetch.ts`, never the global `fetch`.
+- Test each verifier directly: a valid event, tampered content, a wrong app and a missing or forged signature or token, plus each check the protocol has, such as a URL challenge, a stale timestamp or a `serviceUrl` binding. Add route tests for disabled auth, missing configuration and one successful event. `registry.test.ts` covers the shared fail-closed contract for every registered channel.
+- When a channel gains event-verification fields, update `definition.ts`, the verifier, OpenAPI documentation, `docs/configuration.md` and the generated contracts in the same change. Keep a published channel's success payload and error codes stable.
 
 ## Providers
 

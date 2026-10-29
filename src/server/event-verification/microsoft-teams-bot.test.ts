@@ -1,8 +1,8 @@
-import type { BotFrameworkSigningKey } from "./teams-bot-event-verification.ts";
+import type { BotFrameworkSigningKey } from "./microsoft-teams-bot.ts";
 
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { verifyTeamsBotEventRequest } from "./teams-bot-event-verification.ts";
+import { verifyTeamsBotEventRequest } from "./microsoft-teams-bot.ts";
 
 const appId = "00000000-0000-0000-0000-000000000001";
 const issuer = "https://api.botframework.com";
@@ -151,7 +151,7 @@ describe("Teams bot inbound activity verification", () => {
 });
 
 describe("Bot Framework published signing keys", () => {
-  let verifier: typeof import("./teams-bot-event-verification.ts");
+  let verifier: typeof import("./microsoft-teams-bot.ts");
   let keysDocument: unknown;
   const fetcher = vi.fn(async (url: string) =>
     Response.json(url.endsWith("openidconfiguration") ? { jwks_uri: "https://keys.example/jwks" } : keysDocument),
@@ -159,7 +159,9 @@ describe("Bot Framework published signing keys", () => {
 
   beforeEach(async () => {
     vi.resetModules();
-    verifier = await import("./teams-bot-event-verification.ts");
+    // The fresh guarded-fetch module instance forgets vitest.setup.ts's DNS override; keep tests off real DNS.
+    (await import("../../core/guarded-fetch.ts")).setDefaultGuardedFetchDnsLookup(null);
+    verifier = await import("./microsoft-teams-bot.ts");
     vi.spyOn(Date, "now").mockReturnValue(now);
     fetcher.mockClear();
     keysDocument = { keys: [{ ...(await exportJWK(publicKey)), kid: "key-1", endorsements: ["msteams"] }] };

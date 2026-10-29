@@ -1,9 +1,11 @@
+import type { ChannelEventVerifier } from "./contract.ts";
 import type { CryptoKey as JoseCryptoKey, JWK } from "jose";
 
-import { optionalRecord, optionalString, optionalStringOrNull } from "../core/cast.ts";
-import { readBoundedResponseBytes } from "../core/request.ts";
-import { isAllowedTeamsBotConnectorHost } from "../core/teams-bot-connector.ts";
-import { eventRequestMaximumBodyBytes } from "./event-request-body.ts";
+import { optionalRecord, optionalString, optionalStringOrNull } from "../../core/cast.ts";
+import { createGuardedFetch } from "../../core/guarded-fetch.ts";
+import { readBoundedResponseBytes } from "../../core/request.ts";
+import { isAllowedTeamsBotConnectorHost } from "../../core/teams-bot-connector.ts";
+import { eventRequestMaximumBodyBytes } from "./request-body.ts";
 
 /** Bot Framework publishes RSA keys for RS256 tokens in its OpenID metadata. */
 const allowedAlgorithms = ["RS256"];
@@ -73,6 +75,52 @@ export type TeamsBotEventVerificationResult =
 
 /** Raised when Bot Framework's signing keys cannot be fetched; an infrastructure failure, not a rejection. */
 export class BotFrameworkKeysUnavailableError extends Error {}
+
+// Authorization carries the dedicated verify token, so the activity's own bearer token is forwarded here.
+const botFrameworkAuthorizationHeader = "x-botframework-authorization";
+
+const rejectionMessages = {
+  body_too_large: "Teams request body exceeds 64 KiB.",
+  payload: "Invalid Teams activity.",
+  app: "The token audience does not match the selected bot.",
+  timestamp: "The Bot Framework token is expired or not yet valid.",
+  signature: "Invalid Bot Framework token.",
+  unavailable: "Bot Framework signing keys are unavailable.",
+};
+
+/**
+ * Bot Framework authenticates the sender with a bearer token whose audience is
+ * the bot's Application (client) ID on the selected connection. The token does
+ * not sign the activity body; only its serviceUrl is bound to the token.
+ */
+export const microsoftTeamsBotEventVerifier: ChannelEventVerifier<string> = {
+  credentialScope: "connection",
+  messages: {
+    notConfigured: "Connect a Microsoft Teams Bot account with its Application (client) ID first.",
+    bodyTooLarge: rejectionMessages.body_too_large,
+  },
+  readCredential: ({ connectionValues }) => optionalString(connectionValues?.appId),
+  async verify(request, appId) {
+    let result: TeamsBotEventVerificationResult;
+    try {
+      result = await verifyTeamsBotEventRequest({
+        authorization: request.headers.get(botFrameworkAuthorizationHeader) ?? "",
+        rawBody: request.rawBody,
+        appId,
+        now: request.now,
+      });
+    } catch (error) {
+      if (!(error instanceof BotFrameworkKeysUnavailableError)) throw error;
+      return { verified: false, reason: "unavailable", message: rejectionMessages.unavailable };
+    }
+    if (result.valid) return { verified: true, result };
+    const reason =
+      result.reason === "token" || result.reason === "service_url" || result.reason === "channel"
+        ? "signature"
+        : result.reason;
+    return { verified: false, reason, message: rejectionMessages[reason] };
+  },
+};
 
 /**
  * Verifies the bearer token Bot Framework attaches to an inbound Teams activity.
@@ -245,9 +293,12 @@ async function fetchPublishedKeys(cloud: BotFrameworkCloud): Promise<PublishedKe
   return { keys, fetchedAt: now, expiresAt: now + keysTtlMs, refreshError: undefined };
 }
 
-// The metadata URLs are fixed Microsoft endpoints and the jwks_uri they publish is required to be HTTPS.
+// The metadata URLs are fixed Microsoft endpoints, but the jwks_uri comes from a response, so every hop
+// (including redirects) goes through the SSRF guard with DNS validation kept on.
+const keysFetch = createGuardedFetch();
+
 async function fetchJson(url: string): Promise<unknown> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(keysRequestTimeoutMs) });
+  const response = await keysFetch(url, { signal: AbortSignal.timeout(keysRequestTimeoutMs) });
   if (!response.ok) throw new Error(`Bot Framework keys request failed with HTTP ${response.status}.`);
   const bytes = await readBoundedResponseBytes(response, {
     maxBytes: keysDocumentMaximumBytes,

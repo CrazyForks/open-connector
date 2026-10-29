@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { verifyFeishuEventRequest } from "./feishu-event-verification.ts";
+import { verifyFeishuEventRequest } from "./feishu-app-bot.ts";
 
 const appId = "cli_fixture";
 const verificationToken = "fixture-verification-token";
@@ -148,6 +148,18 @@ describe("Feishu inbound event verification", () => {
       signatureVerified: false,
     });
   });
+
+  it.each(["", "   ", 123, null])(
+    "rejects a present but malformed encrypt field instead of reading plaintext (%j)",
+    async (encrypt) => {
+      const body = { type: "url_verification", token: verificationToken, challenge: "challenge-1", encrypt };
+
+      await expect(verify(body, { timestamp: "", nonce: "", signature: "" })).resolves.toEqual({
+        valid: false,
+        reason: "payload",
+      });
+    },
+  );
 
   it("rejects a token mismatch", async () => {
     await expect(verify(eventEnvelope({ token: "wrong" }))).resolves.toEqual({ valid: false, reason: "token" });
