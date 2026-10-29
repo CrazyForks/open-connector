@@ -1,10 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createProviderFetch } from "../providers/provider-runtime.ts";
 import { createGuardedFetch } from "./guarded-fetch.ts";
 import { getProviderNetworkPolicy, withProviderNetworkPolicy } from "./provider-network-policy.ts";
 import { isPrivateNetworkAccessAllowed } from "./request.ts";
 
 describe("runtime network policy", () => {
+  beforeEach(() => vi.stubEnv("OOMOL_CONNECT_ALLOW_PRIVATE_NETWORK", "true"));
+  afterEach(() => vi.unstubAllEnvs());
+
   it("isolates overlapping asynchronous work and restores the outer policy after failure", async () => {
     let release!: () => void;
     const barrier = new Promise<void>((resolve) => {

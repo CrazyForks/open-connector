@@ -375,14 +375,30 @@ The Web Console also lets you copy cURL, TypeScript, and agent prompt examples f
 
 ## Transit Files
 
-Upload a temporary transit file for Actions that accept a file URL:
+Upload a temporary transit file for Actions that accept a file reference or URL:
 
 ```bash
 curl -s -X POST http://localhost:3000/api/files \
   -F "file=@./report.pdf"
 ```
 
-The response includes a `downloadUrl` under `/api/files/:fileId`. The Node runtime stores transit
+The response includes a `fileId` and a `downloadUrl` under `/api/files/:fileId`.
+For `youtube.upload_video_from_url`, pass the file ID directly instead of a local download URL:
+
+```json
+{
+  "file": { "fileId": "<fileId returned by the upload>" },
+  "title": "My video",
+  "privacyStatus": "private"
+}
+```
+
+Provide exactly one of `file` or `mediaUrl`. File references are read directly from the runtime's
+transit storage and do not require private-network access. `mediaUrl` accepts public URLs only,
+including when `OOMOL_CONNECT_ALLOW_PRIVATE_NETWORK` is enabled. Video upload sources are limited
+to 256 MiB; transit uploads also respect the runtime's configured transit-file limit.
+
+The Node runtime stores transit
 files under `OOMOL_CONNECT_DATA_DIR/files` by default and can use a shared S3-compatible backend;
 see [configuration.md](configuration.md#s3-compatible-transit-files). Transit files are cleaned up
 by age.
