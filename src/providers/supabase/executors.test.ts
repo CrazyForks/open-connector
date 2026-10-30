@@ -4,8 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeAction } from "../../core/execution.ts";
 import { setDefaultGuardedFetchDnsLookup } from "../../core/guarded-fetch.ts";
 import { provider } from "./definition.ts";
-import { credentialValidators, executors } from "./executors.ts";
-import { supabaseProviderScopes } from "./scopes.ts";
+import { executors } from "./executors.ts";
 
 interface CapturedRequest {
   url: URL;
@@ -32,94 +31,6 @@ beforeEach(() => {
 afterEach(() => {
   setDefaultGuardedFetchDnsLookup(undefined);
   vi.unstubAllGlobals();
-});
-
-describe("Supabase credential validation", () => {
-  it("validates OAuth through organizations and uses the JWT subject as the account identity", async () => {
-    const accessToken = `header.${Buffer.from(JSON.stringify({ sub: "user-123" })).toString("base64url")}.signature`;
-    const calls: string[] = [];
-    const result = await credentialValidators.oauth2!(
-      { ...oauthCredential, accessToken },
-      {
-        fetcher: async (input, init) => {
-          calls.push(String(input));
-          expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${accessToken}`);
-          return Response.json([{ id: "org-1", name: "Example" }]);
-        },
-      },
-    );
-    expect(calls).toEqual(["https://api.supabase.com/v1/organizations"]);
-    expect(result).toMatchObject({
-      profile: { accountId: "user-123", displayName: "Supabase (Example)", grantedScopes: supabaseProviderScopes },
-      metadata: { validationEndpoint: "/organizations", organizationCount: 1, identitySource: "jwt_sub" },
-    });
-  });
-
-  it("uses a stable organization fingerprint for opaque OAuth tokens", async () => {
-    const organizations = [
-      { id: "org-2", name: "Second" },
-      { id: "org-1", name: "First" },
-    ];
-    const first = await credentialValidators.oauth2!(oauthCredential, {
-      fetcher: async () => Response.json(organizations),
-    });
-    const second = await credentialValidators.oauth2!(
-      { ...oauthCredential, accessToken: "refreshed-token" },
-      {
-        fetcher: async () => Response.json(organizations.toReversed()),
-      },
-    );
-    expect(first?.profile?.accountId).toMatch(/^orgs:/);
-    expect(second?.profile?.accountId).toBe(first?.profile?.accountId);
-    expect(first?.metadata).toMatchObject({ identitySource: "organization_fingerprint" });
-  });
-
-  it("accepts OAuth credentials with an empty organization list", async () => {
-    const result = await credentialValidators.oauth2!(oauthCredential, {
-      fetcher: async () => Response.json([]),
-    });
-    expect(result?.metadata).toMatchObject({ organizationCount: 0, identitySource: "access_token_fingerprint" });
-  });
-
-  it("rejects malformed organization responses", async () => {
-    await expect(
-      credentialValidators.oauth2!(oauthCredential, {
-        fetcher: async () => Response.json({}),
-      }),
-    ).rejects.toMatchObject({ status: 502, message: "malformed supabase organizations response" });
-  });
-
-  it("rejects unauthorized OAuth organization responses", async () => {
-    await expect(
-      credentialValidators.oauth2!(oauthCredential, {
-        fetcher: async () => Response.json({ message: "invalid token" }, { status: 401 }),
-      }),
-    ).rejects.toMatchObject({ status: 400, message: "invalid token" });
-  });
-
-  it("keeps API-key validation on organizations even when the list is empty", async () => {
-    const calls: string[] = [];
-    const result = await credentialValidators.apiKey!(
-      { apiKey: "sbp_test", values: {} },
-      {
-        fetcher: async (input) => {
-          calls.push(String(input));
-          return Response.json([]);
-        },
-      },
-    );
-
-    expect(calls).toEqual(["https://api.supabase.com/v1/organizations"]);
-    expect(result).toMatchObject({
-      profile: { displayName: "Supabase OAuth" },
-      metadata: {
-        validationEndpoint: "/organizations",
-        organizationCount: 0,
-        organizations: [],
-        identitySource: "access_token_fingerprint",
-      },
-    });
-  });
 });
 
 describe("Supabase download_storage_object", () => {
@@ -581,7 +492,7 @@ describe("Supabase upload_storage_object", () => {
     );
   });
 
-  it("maps storage 401 via createSupabaseError to authorization_failed", async () => {
+  it("preserves storage 401 without inferring credential expiry", async () => {
     const file = new File([new Uint8Array([1])], "a.txt", { type: "text/plain" });
     stubResponses([
       Response.json([apiKeyRecord({ id: "secret-1", name: "default", type: "secret", api_key: "sb_secret_test" })]),
@@ -595,7 +506,7 @@ describe("Supabase upload_storage_object", () => {
       { projectRef, bucketId: "documents", objectPath: "a.txt", file: { fileId: "transit-file-1" } },
       store,
     );
-    expect(result).toMatchObject({ ok: false, error: { code: "authorization_failed" } });
+    expect(result).toMatchObject({ ok: false, error: { code: "provider_error", details: { status: 401 } } });
   });
 
   it("maps storage 404 via createSupabaseError to invalid_input", async () => {

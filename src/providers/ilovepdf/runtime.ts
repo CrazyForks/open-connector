@@ -233,11 +233,10 @@ export async function processIlovepdfFiles(
   return { file, task, server, result };
 }
 function taskServerBaseUrl(server: string) {
-  const suffix = ".ilovepdf.com";
-  const label = server.endsWith(suffix) ? server.slice(0, -suffix.length) : "";
-  const number = label.startsWith("api") ? label.slice(3) : "";
-  if (!number || !Array.from(number).every((char) => char >= "0" && char <= "9")) {
-    throw providerResponseError("iLovePDF returned an invalid task server");
+  // Regional task nodes such as api1-c-sg remain restricted to the official domain.
+  const match = /^api[0-9]+(?:-[a-z0-9]+)*\.ilovepdf\.com$/.exec(server);
+  if (match?.[0] !== server) {
+    throw new ProviderRequestError(502, "iLovePDF returned an invalid task server");
   }
   return `https://${server}/v1`;
 }
