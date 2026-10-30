@@ -1263,6 +1263,7 @@ describe("OAuthFlowService", () => {
   });
 
   it("stores the token returned by a provider OAuth runtime", async () => {
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     let callbackParameters: Record<string, string> | undefined;
     let callbackQuery: string | undefined;
     let callbackState: string | undefined;
@@ -1276,7 +1277,7 @@ describe("OAuthFlowService", () => {
             accessToken: "provider-access-token",
             refreshToken: "provider-access-token",
             tokenType: "Bearer",
-            expiresAt: "2026-10-30T00:00:00.000Z",
+            expiresAt,
             providerSecret: { inventory: "provider-owned" },
             metadata: { permissions: "read,write" },
           };
@@ -1302,7 +1303,7 @@ describe("OAuthFlowService", () => {
       authType: "oauth2",
       accessToken: "provider-access-token",
       refreshToken: "provider-access-token",
-      expiresAt: "2026-10-30T00:00:00.000Z",
+      expiresAt,
       providerSecret: { inventory: "provider-owned" },
       metadata: { permissions: "read,write" },
     });
